@@ -248,7 +248,13 @@ function buildGrid(road){
   }
   const index=new Uint16Array(total);
   let k=0;for(const cell of lists)for(const i of cell)index[k++]=i;
-  return {minX,minY,cols,rows,start,index};
+  // Per-segment constants, computed with exactly the same expressions as the scan.
+  const ax=new Float64Array(n),ay=new Float64Array(n),sx=new Float64Array(n),sy=new Float64Array(n),s2=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    const a=pts[i],b=pts[(i+1)%n];
+    ax[i]=a.x;ay[i]=a.y;sx[i]=b.x-a.x;sy[i]=b.y-a.y;s2[i]=sx[i]*sx[i]+sy[i]*sy[i];
+  }
+  return {minX,minY,cols,rows,start,index,ax,ay,sx,sy,s2};
 }
 const GRIDS=new Map();
 function gridFor(road){
@@ -282,13 +288,13 @@ function nearestTo(x,y,road,out){
   const pts=road.points,grid=gridFor(road);
   const c=Math.floor((x-grid.minX)/GRID_CELL),r=Math.floor((y-grid.minY)/GRID_CELL);
   if(!(c>=0&&c<grid.cols&&r>=0&&r<grid.rows))return nearestFull(x,y,pts,out);
-  const cell=r*grid.cols+c,end=grid.start[cell+1],index=grid.index,n=pts.length;
+  const cell=r*grid.cols+c,end=grid.start[cell+1],index=grid.index;
+  const AX=grid.ax,AY=grid.ay,SX=grid.sx,SY=grid.sy,S2=grid.s2;
   let best=Infinity,bi=-1,bt=0;
   for(let k=grid.start[cell];k<end;k++){
-    const i=index[k],a=pts[i],b=pts[(i+1)%n];
-    const dx=b.x-a.x,dy=b.y-a.y,seg2=dx*dx+dy*dy;
-    const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/seg2));
-    const px=a.x+t*dx,py=a.y+t*dy;
+    const i=index[k],ax=AX[i],ay=AY[i],dx=SX[i],dy=SY[i];
+    const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/S2[i]));
+    const px=ax+t*dx,py=ay+t*dy;
     const d2=(x-px)*(x-px)+(y-py)*(y-py);
     if(d2<best){best=d2;bi=i;bt=t;}
   }
@@ -652,7 +658,8 @@ function impulse(car,angle,power,obstacles,options,track,round,collectTrace=true
       }
     }
     // Accumulate actual path length (not ranking progress); detours count.
-    distanceUnits+=Math.hypot(x-previousX,y-previousY);
+    // Only reported in the car summary, which planning runs (no trace) never read.
+    if(collectTrace)distanceUnits+=Math.hypot(x-previousX,y-previousY);
     const completed=Math.max(lapSplits.length,Math.max(0,Math.min(LAPS,Math.floor((progress+0.00001)/L))));
     if(completed>lapSplits.length){
       for(let lap=lapSplits.length+1;lap<=completed;lap++){
