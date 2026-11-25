@@ -111,6 +111,7 @@ function careerFrom(input){
     championshipsPlayed:Number.isInteger(c.championshipsPlayed)&&c.championshipsPlayed>=0?c.championshipsPlayed:0,
     championshipsWon:Number.isInteger(c.championshipsWon)&&c.championshipsWon>=0?c.championshipsWon:0,
     lastChampionship:c.lastChampionship&&typeof c.lastChampionship==="object"?c.lastChampionship:null,
+    carColor:carColor(c),
     history:Array.isArray(c.history)?c.history.slice(-10):[]
   };
 }
@@ -328,18 +329,36 @@ function afterShot(car,power,bumps,surface,options,career,curve=0){
     tireHealth:+Math.max(0,condition-wear).toFixed(2)
   };
 }
+// Paint and names are cosmetic: the AI personality is bound to the car id (cpu1…cpu7),
+// never to its colour, so the player can pick any colour, rival colours included.
 const PALETTE=["#f6bd3e","#f04e58","#39bae6","#35ce9e","#b68df3","#f49c55","#c5d3e0","#37c6cb"];
-const NAMES=["VOS","ROJO","AZUL","VERDE","VIOLETA","NARANJA","PLATA","TURQUESA"];
+const NAMES=["VOS","BRUNO","SOFÍA","TOMÁS","LUCÍA","MATEO","PAULA","CAMILA"];
+const DEFAULT_CAR_COLOR=PALETTE[0];
+const CAR_COLORS=[...PALETTE,"#ff6fae","#a6e04a","#f4f6f8","#2f6bff"];
+function carColor(career){
+  const value=career?.carColor;
+  return CAR_COLORS.includes(value)?value:DEFAULT_CAR_COLOR;
+}
+// Rivals keep their usual paint; whoever shares the player's colour takes the
+// player's default yellow instead, so every car on track stays distinguishable.
+function liveryFor(index,career){
+  const mine=carColor(career);
+  if(index===0)return {name:NAMES[0],color:mine};
+  const usual=PALETTE[index];
+  return {name:NAMES[index],color:usual===mine?DEFAULT_CAR_COLOR:usual};
+}
+function carIndex(id){return id==="human"?0:Number(String(id).replace("cpu",""))||0;}
+function dressed(car,career){return {...car,...liveryFor(carIndex(car.id),career)};}
 // Seven rivals have distinct personalities. Their tyres, wings and launch limits
 // obey exactly the same physics and energy rules as the human car.
 const CPU_PROFILES=[
- {id:"cpu1",style:"ATAQUE",title:"ROJO · EL ATACANTE",tactic:"Arriesga en rectas y persigue adelantamientos",aggression:1.00,risk:.76,energy:.55,precision:.04},
- {id:"cpu2",style:"TRAZADA",title:"AZUL · EL PRECISO",tactic:"Calcula la entrada a curva y prioriza la línea ideal",aggression:.64,risk:1.55,energy:.79,precision:.0},
- {id:"cpu3",style:"AHORRO",title:"VERDE · EL ESTRATEGA",tactic:"Guarda reserva para las últimas curvas",aggression:.48,risk:1.75,energy:1.45,precision:.035},
- {id:"cpu4",style:"ADAPTACIÓN",title:"VIOLETA · EL ADAPTABLE",tactic:"Ajusta el impulso a la superficie y al clima",aggression:.69,risk:1.15,energy:.89,precision:.012},
- {id:"cpu5",style:"ADELANTAR",title:"NARANJA · EL OPORTUNISTA",tactic:"Busca huecos cuando encuentra tráfico",aggression:.98,risk:.87,energy:.77,precision:.018},
- {id:"cpu6",style:"REGULARIDAD",title:"PLATA · EL CONSTANTE",tactic:"Evita choques y mantiene un ritmo equilibrado",aggression:.60,risk:1.48,energy:1.04,precision:.006},
- {id:"cpu7",style:"EFECTO",title:"TURQUESA · EL ESPECIALISTA",tactic:"Aprovecha los efectos curvos para recortar camino",aggression:.86,risk:1.10,energy:.83,precision:.014}
+ {id:"cpu1",style:"ATAQUE",title:"BRUNO · EL ATACANTE",tactic:"Arriesga en rectas y persigue adelantamientos",aggression:1.00,risk:.76,energy:.55,precision:.04},
+ {id:"cpu2",style:"TRAZADA",title:"SOFÍA · LA PRECISA",tactic:"Calcula la entrada a curva y prioriza la línea ideal",aggression:.64,risk:1.55,energy:.79,precision:.0},
+ {id:"cpu3",style:"AHORRO",title:"TOMÁS · EL ESTRATEGA",tactic:"Guarda reserva para las últimas curvas",aggression:.48,risk:1.75,energy:1.45,precision:.035},
+ {id:"cpu4",style:"ADAPTACIÓN",title:"LUCÍA · LA ADAPTABLE",tactic:"Ajusta el impulso a la superficie y al clima",aggression:.69,risk:1.15,energy:.89,precision:.012},
+ {id:"cpu5",style:"ADELANTAR",title:"MATEO · EL OPORTUNISTA",tactic:"Busca huecos cuando encuentra tráfico",aggression:.98,risk:.87,energy:.77,precision:.018},
+ {id:"cpu6",style:"REGULARIDAD",title:"PAULA · LA CONSTANTE",tactic:"Evita choques y mantiene un ritmo equilibrado",aggression:.60,risk:1.48,energy:1.04,precision:.006},
+ {id:"cpu7",style:"EFECTO",title:"CAMILA · LA ESPECIALISTA",tactic:"Aprovecha los efectos curvos para recortar camino",aggression:.86,risk:1.10,energy:.83,precision:.014}
 ];
 function cpuProfile(car){
  return CPU_PROFILES.find(p=>p.id===car.id)||CPU_PROFILES[0];
@@ -383,7 +402,7 @@ export function setup(players, options){
     const row=Math.floor(i/4),lane=lanes[i%4],offset=-row*76;
     const start=sample(offset,track);
     return {
-      id:i===0?"human":"cpu"+i,name:NAMES[i],color:PALETTE[i],
+      id:i===0?"human":"cpu"+i,...liveryFor(i,career),
       x:+(start.x+start.nx*lane).toFixed(2),y:+(start.y+start.ny*lane).toFixed(2),
       angle:Math.atan2(start.ty,start.tx),progress:offset,
       hits:0,finishedAt:null,collisions:0,energy:100,tireHealth:100,
@@ -516,6 +535,8 @@ function completeGrandPrix(state,cars,ranked,round,career){
 export function validateAction(state,playerId,action){
   if(playerId!==state.human) return {ok:false,error:"No controlás este auto."};
   if(!action||typeof action!=="object")return {ok:false,error:"Acción inválida."};
+  if(action.type==="paintCar")
+    return CAR_COLORS.includes(action.color)?{ok:true}:{ok:false,error:"Color no disponible."};
   const champ=state.championship;
   const activeChamp=!!champ&&champ.status!=="complete";
   if(action.type==="startChampionship"){
@@ -800,6 +821,11 @@ function cpuShot(car,index,round,difficulty,obstacles,track){
   return {angle,power:option.power,curve:option.curve};
 }
 export function applyAction(state,playerId,action){
+  if(action.type==="paintCar"){
+    // Cosmetic only: repaint every car (rivals may swap to avoid a clash).
+    const career={...careerFrom(state.career),carColor:action.color};
+    return {...state,career,cars:state.cars.map(car=>dressed(car,career))};
+  }
   if(action.type==="startChampionship")return createChampionship(state,action.cup);
   if(action.type==="nextGrandPrix")return nextGrandPrix(state);
   if(action.type==="abandonChampionship"){
@@ -869,18 +895,24 @@ export function isGameOver(state){
 }
 export function viewFor(state,playerId){
   const track=selectedTrack(equipment(state.config));
-  const ordered=state.phase==="qualifying"?rankedQualifiers(state.cars):
-    state.phase==="grid"?[...state.cars].sort((a,b)=>
+  // Names and paint always come from the current livery (old saves included).
+  const careerNow=careerFrom(state.career);
+  const cars=state.cars.map(car=>dressed(car,careerNow));
+  const qualification=state.qualification?{...state.qualification,
+    results:(state.qualification.results||[]).map(r=>dressed(r,careerNow))}:null;
+  const ordered=state.phase==="qualifying"?rankedQualifiers(cars):
+    state.phase==="grid"?[...cars].sort((a,b)=>
       state.qualification.order.indexOf(a.id)-state.qualification.order.indexOf(b.id)):
-      [...state.cars].sort(raceOrder);
+      [...cars].sort(raceOrder);
   const ranking=ordered.map(c=>({id:c.id,name:c.name,color:c.color,progress:c.progress,
       hits:c.hits,finishedAt:c.finishedAt,lapsCompleted:c.lapsCompleted||0,
       distanceKm:c.distanceKm||0}));
   return {
     version:VERSION,
-    cars:state.cars,round:state.round,phase:state.phase,
-    mode:state.mode||"quick",qualification:state.qualification||null,
-    rivals:state.cars.filter(c=>c.id!=="human").map(c=>({
+    cars,round:state.round,phase:state.phase,
+    mode:state.mode||"quick",qualification,
+    carColor:careerNow.carColor,carColors:CAR_COLORS,
+    rivals:cars.filter(c=>c.id!=="human").map(c=>({
       id:c.id,name:c.name,color:c.color,
       ...cpuProfile(c),tire:c.loadout?.tire||"medium",wing:c.loadout?.wing||"medium",
       hits:c.hits,avgPower:c.hits?+(100*(c.powerSum||0)/c.hits).toFixed(1):0,
@@ -889,7 +921,7 @@ export function viewFor(state,playerId){
     })),
     championship:state.championship?{
       ...state.championship,
-      table:seasonTable(state.championship,state.cars),
+      table:seasonTable(state.championship,cars),
       nextTrack:state.championship.tracks[state.championship.index+1]||null
     }:null,
     laps:LAPS,lapKm:track.lapKm,totalRaceKm:+(track.lapKm*LAPS).toFixed(2),

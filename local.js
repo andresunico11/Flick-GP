@@ -50,7 +50,7 @@ class LocalWebSocket extends EventTarget {
       state=setup([who],state);persist();this.report();return;
     }
     if(msg.type==="action"){
-      if(isGameOver(state).over){this.error("La carrera ya terminó.");return}
+      if(isGameOver(state).over&&msg.action?.type!=="paintCar"){this.error("La carrera ya terminó.");return}
       const verdict=validateAction(state,who,msg.action);
       if(!verdict.ok){this.error(verdict.error||"Impulso inválido");return}
       state=applyAction(state,who,msg.action);

@@ -590,6 +590,7 @@ function updateHud(){
  // Nobody has shot yet: an all-zero tie is not a real order, so show "—".
  const unranked=qualifying&&view.round===0;
  applyVersion(view.version);
+ if(!$("setup-modal").hidden)renderPaint();
  if(!$("rivals-modal").hidden)renderRivals();
  const season=view.championship;
  const ongoing=!!season&&season.status!=="complete";
@@ -631,7 +632,7 @@ function updateHud(){
    const tile=document.createElement("div");tile.className="leader-tile"+(r.id==="human"?" human":"");
    const number=document.createElement("span");number.className="leader-num";number.textContent=unranked?"—":String(i+1);
    const dot=document.createElement("span");dot.className="leader-dot";dot.style.background=r.color;
-   const name=document.createElement("span");name.className="leader-name";name.textContent=r.name==="VOS"?"VOS":r.name.slice(0,3);
+   const name=document.createElement("span");name.className="leader-name";name.textContent=r.name;name.title=r.name;
    tile.append(number,dot,name);mobileLeaders.append(tile);
  });
  const place=ranked.findIndex(r=>r.id==="human")+1;
@@ -674,7 +675,7 @@ function updateHud(){
  if(qualifying){
    setStatus("QUALIFYING "+qRound+"/3 · Prepará tu impulso");
    UI.instruction.innerHTML="<b>QUALIFYING</b> · "+(3-view.round)+" impulsos restantes.";
-   $("mobile-hint").textContent="QUALY "+qRound+"/3 · Apuntá desde el auto amarillo · El efecto está permitido";
+   $("mobile-hint").textContent="QUALY "+qRound+"/3 · Apuntá desde tu auto · El efecto está permitido";
    return;
  }
  if(view.phase==="finished"){
@@ -728,7 +729,7 @@ function updateHud(){
  $("mobile-hint").textContent=view.lastMoves?.[0]?.lapCrossings>0?
    "¡VUELTA COMPLETA! La reserva volvió al 100%":
    cap<100?"Potencia máx. "+cap+"% · Tocá tu auto para lanzar":
-   "Auto amarillo = lanzar · Fondo = mover · Dos dedos = zoom";
+   "Tu auto = lanzar · Fondo = mover · Dos dedos = zoom";
  }
 }
 function render(msg){
@@ -888,7 +889,7 @@ canvas.addEventListener("pointerup",ev=>{
    ev.preventDefault();drag.current=pnt(ev);
    const distance=Math.hypot(drag.start.x-drag.current.x,drag.start.y-drag.current.y),v=vectors();
    stopTouch();
-   $("mobile-hint").textContent="Tocá el auto amarillo para lanzar · Fondo para mover · Pellizcá para zoom";
+   $("mobile-hint").textContent="Tocá tu auto para lanzar · Fondo para mover · Pellizcá para zoom";
    if(distance<14)return;
    if(canShoot()){
      tone(560,.12,"sawtooth");
@@ -899,11 +900,11 @@ canvas.addEventListener("pointerup",ev=>{
  if(!navigate.pointers.has(ev.pointerId))return;
  ev.preventDefault();navigate.pointers.delete(ev.pointerId);
  navigate.pinch=navigate.pointers.size>=2?pinchReading():null;
- if(!navigate.pointers.size)$("mobile-hint").textContent="Tocá el auto amarillo para lanzar · Fondo para mover · Pellizcá para zoom";
+ if(!navigate.pointers.size)$("mobile-hint").textContent="Tocá tu auto para lanzar · Fondo para mover · Pellizcá para zoom";
 });
 canvas.addEventListener("pointercancel",ev=>{
  if(drag){
-   if(ev.pointerId===drag.id){stopTouch();$("mobile-hint").textContent="Auto amarillo = lanzar · Fondo = mover · Dos dedos = zoom";}
+   if(ev.pointerId===drag.id){stopTouch();$("mobile-hint").textContent="Tu auto = lanzar · Fondo = mover · Dos dedos = zoom";}
    else if(steer&&ev.pointerId===steer.id)steer=null;
  }else if(navigate.pointers.has(ev.pointerId)){
    navigate.pointers.delete(ev.pointerId);navigate.pinch=null;
@@ -1076,10 +1077,7 @@ function renderChampionship(){
  });
  const results=$("championship-table");results.replaceChildren();
  const table=season?.table||[
-   {id:"human",name:"VOS",color:"#f6bd3e"},
-   ...["ROJO","AZUL","VERDE","VIOLETA","NARANJA","PLATA","TURQUESA"].map((name,i)=>({
-     id:"cpu"+(i+1),name,color:["#f04e58","#39bae6","#35ce9e","#b68df3","#f49c55","#c5d3e0","#37c6cb"][i]
-   }))
+   ...(view?.cars||[]).map(car=>({id:car.id,name:car.name,color:car.color}))
  ].map((row,i)=>({...row,position:i+1,points:0,events:[]}));
  for(const row of table){
    const node=document.createElement("div");node.className="champ-row"+(row.id==="human"?" human":"");
@@ -1230,6 +1228,20 @@ document.addEventListener("keydown",ev=>{
 $("reset").addEventListener("click",reset);
 $("quick-reset").addEventListener("click",reset);
 $("play-again").addEventListener("click",reset);
+const PAINT_NAMES={"#f6bd3e":"Amarillo","#f04e58":"Rojo","#39bae6":"Celeste","#35ce9e":"Verde","#b68df3":"Violeta",
+ "#f49c55":"Naranja","#c5d3e0":"Plata","#37c6cb":"Turquesa","#ff6fae":"Rosa","#a6e04a":"Lima","#f4f6f8":"Blanco","#2f6bff":"Azul"};
+function renderPaint(){
+ const box=$("paint-swatches");if(!box||!view)return;
+ box.replaceChildren();
+ for(const color of view.carColors||[]){
+   const b=document.createElement("button");b.type="button";b.className="paint-swatch";
+   b.style.background=color;b.title=PAINT_NAMES[color]||color;
+   b.setAttribute("aria-label","Pintar tu auto: "+(PAINT_NAMES[color]||color));
+   b.setAttribute("aria-pressed",String(color===view.carColor));
+   b.addEventListener("click",()=>{if(color!==view.carColor){tone(620,.05,"triangle");send({type:"action",action:{type:"paintCar",color}});}});
+   box.append(b);
+ }
+}
 function openSettings(){
  $("rivals-modal").hidden=true;
  if(!$("garage-modal").hidden)hideGarage();
@@ -1241,6 +1253,7 @@ function openSettings(){
  $("track-select").value=config.track||"valley";
  syncCircuitCards();
  $("race-mode-select").value="qualifying";
+ renderPaint();
  const season=view?.championship,locked=season&&season.status!=="complete";
  $("race-mode-select").disabled=!!locked;
  $("track-select").disabled=!!locked;

@@ -673,6 +673,15 @@
     .grid-pilot{min-width:0}
     .grid-pilot-info{flex:1 1 auto}
     .grid-pilot-info small{white-space:normal;overflow-wrap:anywhere;line-height:1.3}
+    /* Paint picker: any colour, rivals adapt. */
+    .paint-swatches{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-top:4px}
+    .paint-swatch{aspect-ratio:1;min-height:32px;border-radius:9px;border:2px solid #ffffff30;box-shadow:inset 0 -6px 0 #0000002b;padding:0}
+    .paint-swatch[aria-pressed="true"]{border-color:#fff;outline:2px solid #f8be43;outline-offset:2px}
+    /* Full driver names in the mobile standings strip. */
+    @media(max-width:940px){
+      .leader-tile{padding:7px 5px;gap:3px}
+      .leader-name{font-size:9.5px;letter-spacing:-.1px}
+    }
   </style>
 </head>
 <body>
@@ -695,7 +704,7 @@
         <span id="zoom-level" aria-live="polite">100%</span>
         <button id="zoom-in" type="button" aria-label="Acercar la cámara">+</button>
         <button id="map-toggle" type="button" aria-pressed="false" aria-label="Mostrar u ocultar el minimapa" title="Minimapa">▤</button>
-        <button id="focus-car" type="button" aria-label="Centrar cámara en el auto amarillo" title="Centrar en mi auto">⌖</button>
+        <button id="focus-car" type="button" aria-label="Centrar cámara en tu auto" title="Centrar en mi auto">⌖</button>
       </div>
     </section>
     <div class="layout">
@@ -704,7 +713,7 @@
           <div class="label-pill"><small id="track-number">CIRCUITO 01</small><strong id="track-name">Valle Verde</strong><small class="track-weather" id="track-weather" data-weather="sunny">SOLEADO</small></div>
           <div class="label-pill" style="text-align:right"><small id="desktop-lap">VUELTA 1/2</small><strong id="round">RONDA 01</strong></div>
         </div>
-        <canvas id="race" tabindex="0" aria-label="Pista interactiva. Para lanzar tocá el auto amarillo y arrastrá. Desde el fondo mové la cámara o usá dos dedos para zoom. Con el primer dedo sobre el auto, el segundo regula el efecto."></canvas>
+        <canvas id="race" tabindex="0" aria-label="Pista interactiva. Para lanzar tocá tu auto y arrastrá. Desde el fondo mové la cámara o usá dos dedos para zoom. Con el primer dedo sobre el auto, el segundo regula el efecto."></canvas>
         <div class="arena-bottom">
           <div class="instruction" id="instruction"><b>1 DEDO:</b> dirección y potencia. <b>2 DEDOS:</b> curvatura.</div>
           <div class="power">
@@ -789,7 +798,7 @@
         <span>↗ <b id="mobile-km">0,00 km</b></span>
         <span>● <b id="mobile-shots">0 impulsos</b></span>
       </div>
-      <div class="mobile-hint" id="mobile-hint">Tocá el auto amarillo para lanzar · Fondo para mover · Pellizcá para zoom</div>
+      <div class="mobile-hint" id="mobile-hint">Tocá tu auto para lanzar · Fondo para mover · Pellizcá para zoom</div>
       <button id="qualify-trigger" class="qualify-trigger" type="button">🏁 INICIAR QUALIFYING · 3 IMPULSOS</button>
       <div class="mobile-risk" id="mobile-risk" hidden>RIESGO BAJO</div>
     </section>
@@ -887,6 +896,11 @@
           <button class="close-settings" id="close-settings" type="button" aria-label="Cerrar configuración">✕</button>
         </div>
         <div class="setting-grid">
+          <div class="setting-block paint-setting" role="group" aria-labelledby="paint-heading">
+            <strong id="paint-heading">Color de tu auto</strong>
+            <span>Solo estética: se aplica al instante y no cambia la física ni a los rivales.</span>
+            <div class="paint-swatches" id="paint-swatches"></div>
+          </div>
           <label class="setting-block race-mode-setting" for="race-mode-select">
             <strong>Modalidad de carrera</strong>
             <span>Qualifying: tres impulsos para conseguir una posición de largada</span>
