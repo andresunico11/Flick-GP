@@ -26,6 +26,14 @@ NOVEDADES 0.7.5
 - Guardado versionado: las partidas de 0.7.3 y 0.7.4 se conservan
   con créditos, mejoras, historial y campeonato en curso.
 - Vista previa al compartir con imagen grande.
+- Orden de turnos por posición: en cada ronda tira primero el que
+  va adelante. Si largás 5.º, los cuatro de adelante ya se movieron
+  cuando te toca, así no chocás con un auto que todavía no salió.
+- Elegí el color de tu auto en Configuración (12 colores). Es solo
+  estética: la IA de cada rival depende de su personalidad, no del
+  color. Los rivales ahora tienen nombre propio: Bruno, Sofía,
+  Tomás, Lucía, Mateo, Paula y Camila.
+- La tabla de posiciones de abajo muestra los nombres completos.
 
 SE MANTIENE
 - Siete rivales con personalidades distintas y tres niveles.

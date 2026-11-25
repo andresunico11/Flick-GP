@@ -841,38 +841,69 @@ export function applyAction(state,playerId,action){
   }
   if(action.type==="startQualifying")return startQualifying(state);
   if(action.type==="quickRace")return {...setup([state.human],state),mode:"quick"};
-  if(action.type==="startRace")return {...state,phase:"racing",round:0,lastMoves:[],
+  if(action.type==="startRace")return countMoves(state,beginRound({...state,phase:"racing",round:0,lastMoves:[],
     cars:state.cars.map(car=>({...car,energy:100,tireHealth:100,hits:0})),
-    winner:null};
+    winner:null,turn:null}));
   if(action.type==="upgrade"){
     const career=careerFrom(state.career);
     const part=SHOP[action.upgrade],level=career.upgrades[action.upgrade],price=part.costs[level];
     return {...state,career:{...career,credits:career.credits-price,
       upgrades:{...career.upgrades,[action.upgrade]:level+1}}};
   }
-  if(state.phase==="qualifying")return applyQualifying(state,action);
-  const career=careerFrom(state.career);
-  const config=equipment(state.config),track=selectedTrack(config),L=activeRoad(track).length;
+  if(state.phase==="qualifying")return countMoves(state,applyQualifying(state,action));
+  return countMoves(state,playRound(state,action));
+}
+// Every batch of new moves gets a sequence number so the client knows what to animate.
+function countMoves(before,after){
+  return after.lastMoves!==before.lastMoves&&after.lastMoves?.length?
+    {...after,moveSeq:(before.moveSeq||0)+1}:after;
+}
+// Race turn order: the leader shoots first, then each car in race position. Ties
+// (same row on the grid) follow the starting grid. Cars ahead of the player move
+// BEFORE the player aims, so you never shoot into a car that has not left yet.
+function turnOrder(state){
+  const grid=state.qualification?.order;
+  const slot=car=>{const k=grid?grid.indexOf(car.id):-1;return k>=0?k:state.cars.indexOf(car);};
+  return [...state.cars].sort((a,b)=>raceOrder(a,b)||slot(a)-slot(b)).map(car=>car.id);
+}
+function raceMove(cars,i,action,round,config,track,career){
+  const car=cars[i];
+  // A finished car has already crossed the line in a previous round;
+  // its place stays fixed, while others can finish this equal-strokes round.
+  if(car.finishedAt!==null && round+1>car.finishedAt)
+    return {id:car.id,trace:[[car.x,car.y]],angle:car.angle,power:0,bumps:0,lapCrossings:0};
+  const recommended=i===0?action:cpuShot(car,i,round,config.difficulty,cars,track);
+  const shot={...recommended,power:Math.min(maxPower(car),recommended.power)};
+  const curve=shot.curve??0;
+  const res=impulse(car,shot.angle,shot.power,cars,config,track,round,true,career,curve);
+  cars[i]=res.car;
+  return {id:car.id,trace:res.trace,angle:shot.angle,power:shot.power,curve,bumps:res.bumps,
+    energy:res.car.energy,tireHealth:res.car.tireHealth,
+    risk:res.risk,offTrackFrames:res.offTrackFrames,cornerLoad:res.cornerLoad,
+    lapCrossings:res.lapCrossings,distanceKm:res.car.distanceKm,lapsCompleted:res.car.lapsCompleted};
+}
+function moveIds(state,cars,ids,action){
+  const config=equipment(state.config),track=selectedTrack(config),career=careerFrom(state.career);
+  return ids.map(id=>raceMove(cars,cars.findIndex(c=>c.id===id),action,state.round,config,track,career));
+}
+// Opens a racing round: the cars ahead of the player take their shot right away.
+function beginRound(state){
+  if(state.phase!=="racing")return state;
+  const order=turnOrder(state),ahead=order.slice(0,order.indexOf("human"));
   const cars=state.cars.map(c=>({...c}));
-  const moves=[];
-  for(let i=0;i<cars.length;i++){
-    const car=cars[i];
-    const recommended=i===0?action:cpuShot(car,i,state.round,config.difficulty,cars,track);
-    const shot={...recommended,power:Math.min(maxPower(car),recommended.power)};
-    // A finished car has already crossed the line in a previous round;
-    // its place stays fixed, while others can finish this equal-strokes round.
-    if(car.finishedAt!==null && state.round+1>car.finishedAt){
-      moves.push({id:car.id,trace:[[car.x,car.y]],angle:car.angle,power:0,bumps:0,lapCrossings:0});
-      continue;
-    }
-    const curve=shot.curve??0;
-    const res=impulse(car,shot.angle,shot.power,cars,config,track,state.round,true,career,curve);
-    cars[i]=res.car;
-    moves.push({id:car.id,trace:res.trace,angle:shot.angle,power:shot.power,curve,bumps:res.bumps,
-      energy:res.car.energy,tireHealth:res.car.tireHealth,
-      risk:res.risk,offTrackFrames:res.offTrackFrames,cornerLoad:res.cornerLoad,
-      lapCrossings:res.lapCrossings,distanceKm:res.car.distanceKm,lapsCompleted:res.car.lapsCompleted});
-  }
+  const moves=moveIds(state,cars,ahead,null);
+  return {...state,cars,turn:{round:state.round,order},
+    lastMoves:[...(state.lastMoves||[]),...moves]};
+}
+function playRound(state,action){
+  const career=careerFrom(state.career);
+  const config=equipment(state.config);
+  const cars=state.cars.map(c=>({...c}));
+  // Saves from before 0.7.5 have no open turn: the cars ahead move now, still first.
+  const open=state.turn?.round===state.round?state.turn:null;
+  const order=open?open.order:turnOrder(state);
+  const from=open?order.indexOf("human"):0;
+  const moves=moveIds(state,cars,order.slice(from),action);
   const round=state.round+1;
   const finished=cars.filter(c=>c.finishedAt!==null);
   const over=finished.length>0 || round>=state.maxRounds;
@@ -885,8 +916,9 @@ export function applyAction(state,playerId,action){
     championship=finish.championship;
     reward=finish.career;
   }
-  return {...state,cars,round,career:reward,championship,
+  const next={...state,cars,round,career:reward,championship,turn:null,
     phase:over?"finished":"racing",winner:over?ranked[0].id:null,lastMoves:moves};
+  return over?next:beginRound(next);
 }
 export function isGameOver(state){
   // Between GPs the room remains actionable so we can advance without resetting.
@@ -908,7 +940,9 @@ export function viewFor(state,playerId){
       hits:c.hits,finishedAt:c.finishedAt,lapsCompleted:c.lapsCompleted||0,
       distanceKm:c.distanceKm||0}));
   return {
-    version:VERSION,
+    version:VERSION,moveSeq:state.moveSeq||0,
+    // How many cars ahead of you already shot this round (they go first).
+    movedAhead:state.phase==="racing"&&state.turn?.round===state.round?state.turn.order.indexOf("human"):0,
     cars,round:state.round,phase:state.phase,
     mode:state.mode||"quick",qualification,
     carColor:careerNow.carColor,carColors:CAR_COLORS,

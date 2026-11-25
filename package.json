@@ -9,6 +9,6 @@
     "golden:update": "node tools/golden.mjs --update",
     "sim": "node tools/sim.mjs",
     "perf": "node tools/perf.mjs",
-    "test": "node tools/nearest-test.mjs && node tools/migrate-test.mjs && node tools/golden.mjs"
+    "test": "node tools/nearest-test.mjs && node tools/migrate-test.mjs && node tools/turn-test.mjs && node tools/golden.mjs"
   }
 }

@@ -19,6 +19,14 @@ sin dependencias. Se abre tal cual en Safari.
   explícitos por versión. Una migración **nunca** puede perder créditos, mejoras,
   historial ni totales de campeonatos (todo eso está en `state.career`). Si cambia el
   formato: subí `SAVE_VERSION`, agregá un paso en `STEPS` y un fixture en `tools/fixtures/`.
+- **Turnos de carrera**: en cada ronda tira primero el que va adelante (`turnOrder`:
+  orden de carrera y, en empate, la grilla). `beginRound` mueve a los autos de adelante
+  del jugador apenas abre la ronda; el `flick` del jugador mueve al jugador y a los de
+  atrás, cierra la ronda y abre la siguiente. `state.turn` guarda la ronda abierta y
+  `moveSeq` numera cada tanda de movimientos para que el cliente la anime en orden.
+- **Nombres y colores son cosméticos**: la IA depende del id (`cpu1…cpu7`), nunca del
+  color. `career.carColor` (acción `paintCar`) pinta tu auto; `viewFor` aplica nombre y
+  pintura (`liveryFor`). El golden ignora `name`, `color`, `carColor` y `title`.
 - **Versión**: un único `VERSION` en `logic.js`; llega al cliente por `viewFor().version`
   y se usa en `<title>`, pie y modal de grilla. No escribas versiones a mano en el HTML.
 
@@ -30,7 +38,7 @@ sin dependencias. Se abre tal cual en Safari.
 | `npm run golden:update` | Regenera `tools/golden.json`. |
 | `npm run sim -- --track desert --difficulty expert` | Una carrera headless con tabla de resultados (`--cup classic` para un campeonato). |
 | `npm run perf` | ms por ronda (8 autos, IA incluida) en Experto. Meta: < 40 ms. `--difficulty pro`, `--tracks valley,city`, `--check` para fallar si se pasa. |
-| `npm test` | `nearest-test` (grilla vs. algoritmo original) + `migrate-test` (saves 0.6/0.7.3/0.7.4) + golden. |
+| `npm test` | `nearest-test` (grilla vs. algoritmo original) + `migrate-test` (saves 0.6/0.7.3/0.7.4) + `turn-test` (orden de turnos) + golden. |
 
 ### Regla de oro
 

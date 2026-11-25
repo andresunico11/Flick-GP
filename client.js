@@ -426,14 +426,21 @@ function drawCar(car,human,now){
  if(human){c.strokeStyle=drag?"#ffdf83":"#ffcf76bb";c.lineWidth=2;c.setLineDash([5,5]);c.beginPath();c.arc(0,0,31+Math.sin(now/260)*2,0,Math.PI*2);c.stroke();}
  c.restore();
 }
+// Moves play one after another in turn order (leader first). One batch can hold the
+// end of a round and the opening shots of the next, so a car may move twice.
 function animated(car,now){
  if(!anim)return car;
  const t=(now-anim.started)/anim.stepMs,n=Math.floor(t),f=Math.max(0,Math.min(1,t-n));
- const i=car.id==="human"?0:Number(car.id.slice(-1));
- const track=anim.moves[i]?.trace;
- if(!track?.length)return car;
- if(i>n)return {...car,x:track[0][0],y:track[0][1]};
- if(i<n)return car;
+ let first=-1,current=-1;
+ anim.moves.forEach((m,k)=>{if(m?.id!==car.id||!m.trace?.length)return;if(first<0)first=k;if(k<=n)current=k;});
+ if(first<0)return car;
+ if(current<0){const p=anim.moves[first].trace[0];return {...car,x:p[0],y:p[1]};}
+ const track=anim.moves[current].trace;
+ if(current<n){
+   const later=anim.moves.some((m,k)=>k>current&&m?.id===car.id&&m.trace?.length);
+   if(!later)return car;
+   const p=track[track.length-1];return {...car,x:p[0],y:p[1]};
+ }
  const at=f*(track.length-1),j=Math.floor(at),q=at-j;
  const a=track[j]||track[track.length-1],b=track[Math.min(j+1,track.length-1)];
  const prev=track[Math.max(0,j-2)],next=track[Math.min(j+2,track.length-1)];
@@ -561,7 +568,7 @@ function updateResources(){
   $("power-ceiling").style.left=(cap*100)+"%";
   $("energy-fill").style.background=energy<35?"#fa7868":energy<65?"#e7bc58":"#62dcb6";
   $("tire-fill").style.background=tire<40?"#ef7770":tire<70?"#e8b956":"#f8c667";
-  const last=view.lastMoves?.[0];
+  const last=humanMove();
   const msg=last?.lapCrossings>0?"¡VUELTA COMPLETA! RESERVA RECARGADA AL 100%":
     Math.abs(last?.curve||0)>.035?"Último efecto: "+(last.curve<0?"izquierda":"derecha")+" "+Math.round(Math.abs(last.curve)*100)+"%":
     last?.risk==="high"?"Último golpe: riesgo alto, corregí la trazada":
@@ -583,6 +590,7 @@ function applyVersion(version){
  $("version-foot").textContent="FLICK GP · PROTOTIPO JUGABLE V"+version;
  $("grid-brow").textContent="FLICK GP "+version+" · QUALIFYING COMPLETADO";
 }
+function humanMove(){return (view?.lastMoves||[]).find(m=>m.id==="human");}
 function setStatus(t,bad=false){UI.status.textContent="● "+t;UI.status.classList.toggle("error-text",bad)}
 function updateHud(){
  if(!view)return;
@@ -723,10 +731,12 @@ function updateHud(){
   setStatus(win?"¡Victoria!":"Carrera finalizada");
   UI.instruction.innerHTML="<b>CARRERA TERMINADA</b> · Probá de nuevo.";
  }else{
-  setStatus(view.yourTurn?"Vuelta "+(view.playerLap||1)+"/2 · ¡calculá el impulso!":"Preparando turnos…");
+  const ahead=view.movedAhead||0;
+  setStatus(view.yourTurn?"Vuelta "+(view.playerLap||1)+"/2 · "+
+    (ahead?(ahead===1?"ya tiró el de adelante":"ya tiraron los "+ahead+" de adelante")+" · ¡tu turno!":"¡calculá el impulso!"):"Preparando turnos…");
   const cap=Math.round((view.maxPower??1)*100);
   if(!drag)UI.instruction.innerHTML=cap<100?"<b>POTENCIA MÁX. "+cap+"%</b> · Arrastrá desde el auto.":"<b>TOCÁ TU AUTO:</b> para lanzar. <b>FONDO:</b> cámara.";
- $("mobile-hint").textContent=view.lastMoves?.[0]?.lapCrossings>0?
+ $("mobile-hint").textContent=humanMove()?.lapCrossings>0?
    "¡VUELTA COMPLETA! La reserva volvió al 100%":
    cap<100?"Potencia máx. "+cap+"% · Tocá tu auto para lanzar":
    "Tu auto = lanzar · Fondo = mover · Dos dedos = zoom";
@@ -746,9 +756,11 @@ function render(msg){
  forecastCache=null;
  if(previous?.round!==view.round){keyboardAimActive=false;showAimRisk(null);}
  keyboardPower=Math.max(.12,Math.min(keyboardPower,view.maxPower??1));
- if(previous&&view.round>previous.round&&view.lastMoves?.length===8){
-  anim={moves:view.phase==="qualifying"?view.lastMoves.slice(0,1):view.lastMoves,
-    started:performance.now(),stepMs:view.phase==="qualifying"?520:245};
+ if(previous&&view.moveSeq!==previous.moveSeq&&view.lastMoves?.length){
+  // Qualifying runs are solo sessions: only your own run is shown.
+  const shown=previous.phase==="qualifying"?view.lastMoves.filter(m=>m.id==="human"):view.lastMoves;
+  anim={moves:shown,
+    started:performance.now(),stepMs:previous.phase==="qualifying"?520:245};
   const currentAnimation=anim;
   // Timers still settle the round when the browser throttles animation frames.
   setTimeout(()=>{if(anim===currentAnimation){anim=null;updateHud();}},
