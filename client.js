@@ -426,14 +426,21 @@ function drawCar(car,human,now){
  if(human){c.strokeStyle=drag?"#ffdf83":"#ffcf76bb";c.lineWidth=2;c.setLineDash([5,5]);c.beginPath();c.arc(0,0,31+Math.sin(now/260)*2,0,Math.PI*2);c.stroke();}
  c.restore();
 }
+// Moves play one after another in turn order (leader first). One batch can hold the
+// end of a round and the opening shots of the next, so a car may move twice.
 function animated(car,now){
  if(!anim)return car;
  const t=(now-anim.started)/anim.stepMs,n=Math.floor(t),f=Math.max(0,Math.min(1,t-n));
- const i=car.id==="human"?0:Number(car.id.slice(-1));
- const track=anim.moves[i]?.trace;
- if(!track?.length)return car;
- if(i>n)return {...car,x:track[0][0],y:track[0][1]};
- if(i<n)return car;
+ let first=-1,current=-1;
+ anim.moves.forEach((m,k)=>{if(m?.id!==car.id||!m.trace?.length)return;if(first<0)first=k;if(k<=n)current=k;});
+ if(first<0)return car;
+ if(current<0){const p=anim.moves[first].trace[0];return {...car,x:p[0],y:p[1]};}
+ const track=anim.moves[current].trace;
+ if(current<n){
+   const later=anim.moves.some((m,k)=>k>current&&m?.id===car.id&&m.trace?.length);
+   if(!later)return car;
+   const p=track[track.length-1];return {...car,x:p[0],y:p[1]};
+ }
  const at=f*(track.length-1),j=Math.floor(at),q=at-j;
  const a=track[j]||track[track.length-1],b=track[Math.min(j+1,track.length-1)];
  const prev=track[Math.max(0,j-2)],next=track[Math.min(j+2,track.length-1)];
@@ -561,7 +568,7 @@ function updateResources(){
   $("power-ceiling").style.left=(cap*100)+"%";
   $("energy-fill").style.background=energy<35?"#fa7868":energy<65?"#e7bc58":"#62dcb6";
   $("tire-fill").style.background=tire<40?"#ef7770":tire<70?"#e8b956":"#f8c667";
-  const last=view.lastMoves?.[0];
+  const last=humanMove();
   const msg=last?.lapCrossings>0?"¡VUELTA COMPLETA! RESERVA RECARGADA AL 100%":
     Math.abs(last?.curve||0)>.035?"Último efecto: "+(last.curve<0?"izquierda":"derecha")+" "+Math.round(Math.abs(last.curve)*100)+"%":
     last?.risk==="high"?"Último golpe: riesgo alto, corregí la trazada":
@@ -574,10 +581,24 @@ function updateResources(){
     $("mobile-hint").textContent="¡VUELTA COMPLETA! Reserva de energía: 100%";
   }
 }
+// The version lives only in logic.js (VERSION) and arrives through viewFor.
+let shownVersion="";
+function applyVersion(version){
+ if(!version||version===shownVersion)return;
+ shownVersion=version;
+ document.title="FLICK GP "+version+" — Cada impulso cuenta";
+ $("version-foot").textContent="FLICK GP · PROTOTIPO JUGABLE V"+version;
+ $("grid-brow").textContent="FLICK GP "+version+" · QUALIFYING COMPLETADO";
+}
+function humanMove(){return (view?.lastMoves||[]).find(m=>m.id==="human");}
 function setStatus(t,bad=false){UI.status.textContent="● "+t;UI.status.classList.toggle("error-text",bad)}
 function updateHud(){
  if(!view)return;
  const qualifying=view.phase==="qualifying",onGrid=view.phase==="grid";
+ // Nobody has shot yet: an all-zero tie is not a real order, so show "—".
+ const unranked=qualifying&&view.round===0;
+ applyVersion(view.version);
+ if(!$("setup-modal").hidden)renderPaint();
  if(!$("rivals-modal").hidden)renderRivals();
  const season=view.championship;
  const ongoing=!!season&&season.status!=="complete";
@@ -604,7 +625,7 @@ function updateHud(){
  const ranked=[...view.ranking];
  ranked.forEach((r,i)=>{
   const row=document.createElement("div");row.className="standing"+(r.id==="human"?" human":"");
-  const n=document.createElement("span");n.className="pos";n.textContent=String(i+1).padStart(2,"0");
+  const n=document.createElement("span");n.className="pos";n.textContent=unranked?"—":String(i+1).padStart(2,"0");
   const dot=document.createElement("span");dot.className="dot";dot.style.background=r.color;
   const name=document.createElement("span");name.className="name";name.textContent=r.name;
   const hits=document.createElement("small");
@@ -617,13 +638,13 @@ function updateHud(){
  mobileLeaders.replaceChildren();
  ranked.forEach((r,i)=>{
    const tile=document.createElement("div");tile.className="leader-tile"+(r.id==="human"?" human":"");
-   const number=document.createElement("span");number.className="leader-num";number.textContent=String(i+1);
+   const number=document.createElement("span");number.className="leader-num";number.textContent=unranked?"—":String(i+1);
    const dot=document.createElement("span");dot.className="leader-dot";dot.style.background=r.color;
-   const name=document.createElement("span");name.className="leader-name";name.textContent=r.name==="VOS"?"VOS":r.name.slice(0,3);
+   const name=document.createElement("span");name.className="leader-name";name.textContent=r.name;name.title=r.name;
    tile.append(number,dot,name);mobileLeaders.append(tile);
  });
  const place=ranked.findIndex(r=>r.id==="human")+1;
- $("mini-status").textContent=qualifying?"Q"+qRound+"/3 · "+place+".º":onGrid?"P"+place:
+ $("mini-status").textContent=qualifying?"Q"+qRound+"/3 · "+(unranked?"—":place+".º"):onGrid?"P"+place:
    place+"º / "+view.cars.length;
  $("race-stage-label").textContent=season?
    "🏆 "+season.name.toUpperCase()+" · GP "+(season.index+1)+"/3":
@@ -662,7 +683,7 @@ function updateHud(){
  if(qualifying){
    setStatus("QUALIFYING "+qRound+"/3 · Prepará tu impulso");
    UI.instruction.innerHTML="<b>QUALIFYING</b> · "+(3-view.round)+" impulsos restantes.";
-   $("mobile-hint").textContent="QUALY "+qRound+"/3 · Apuntá desde el auto amarillo · El efecto está permitido";
+   $("mobile-hint").textContent="QUALY "+qRound+"/3 · Apuntá desde tu auto · El efecto está permitido";
    return;
  }
  if(view.phase==="finished"){
@@ -710,13 +731,15 @@ function updateHud(){
   setStatus(win?"¡Victoria!":"Carrera finalizada");
   UI.instruction.innerHTML="<b>CARRERA TERMINADA</b> · Probá de nuevo.";
  }else{
-  setStatus(view.yourTurn?"Vuelta "+(view.playerLap||1)+"/2 · ¡calculá el impulso!":"Preparando turnos…");
+  const ahead=view.movedAhead||0;
+  setStatus(view.yourTurn?"Vuelta "+(view.playerLap||1)+"/2 · "+
+    (ahead?(ahead===1?"ya tiró el de adelante":"ya tiraron los "+ahead+" de adelante")+" · ¡tu turno!":"¡calculá el impulso!"):"Preparando turnos…");
   const cap=Math.round((view.maxPower??1)*100);
   if(!drag)UI.instruction.innerHTML=cap<100?"<b>POTENCIA MÁX. "+cap+"%</b> · Arrastrá desde el auto.":"<b>TOCÁ TU AUTO:</b> para lanzar. <b>FONDO:</b> cámara.";
- $("mobile-hint").textContent=view.lastMoves?.[0]?.lapCrossings>0?
+ $("mobile-hint").textContent=humanMove()?.lapCrossings>0?
    "¡VUELTA COMPLETA! La reserva volvió al 100%":
    cap<100?"Potencia máx. "+cap+"% · Tocá tu auto para lanzar":
-   "Auto amarillo = lanzar · Fondo = mover · Dos dedos = zoom";
+   "Tu auto = lanzar · Fondo = mover · Dos dedos = zoom";
  }
 }
 function render(msg){
@@ -733,9 +756,11 @@ function render(msg){
  forecastCache=null;
  if(previous?.round!==view.round){keyboardAimActive=false;showAimRisk(null);}
  keyboardPower=Math.max(.12,Math.min(keyboardPower,view.maxPower??1));
- if(previous&&view.round>previous.round&&view.lastMoves?.length===8){
-  anim={moves:view.phase==="qualifying"?view.lastMoves.slice(0,1):view.lastMoves,
-    started:performance.now(),stepMs:view.phase==="qualifying"?520:245};
+ if(previous&&view.moveSeq!==previous.moveSeq&&view.lastMoves?.length){
+  // Qualifying runs are solo sessions: only your own run is shown.
+  const shown=previous.phase==="qualifying"?view.lastMoves.filter(m=>m.id==="human"):view.lastMoves;
+  anim={moves:shown,
+    started:performance.now(),stepMs:previous.phase==="qualifying"?520:245};
   const currentAnimation=anim;
   // Timers still settle the round when the browser throttles animation frames.
   setTimeout(()=>{if(anim===currentAnimation){anim=null;updateHud();}},
@@ -876,7 +901,7 @@ canvas.addEventListener("pointerup",ev=>{
    ev.preventDefault();drag.current=pnt(ev);
    const distance=Math.hypot(drag.start.x-drag.current.x,drag.start.y-drag.current.y),v=vectors();
    stopTouch();
-   $("mobile-hint").textContent="Tocá el auto amarillo para lanzar · Fondo para mover · Pellizcá para zoom";
+   $("mobile-hint").textContent="Tocá tu auto para lanzar · Fondo para mover · Pellizcá para zoom";
    if(distance<14)return;
    if(canShoot()){
      tone(560,.12,"sawtooth");
@@ -887,11 +912,11 @@ canvas.addEventListener("pointerup",ev=>{
  if(!navigate.pointers.has(ev.pointerId))return;
  ev.preventDefault();navigate.pointers.delete(ev.pointerId);
  navigate.pinch=navigate.pointers.size>=2?pinchReading():null;
- if(!navigate.pointers.size)$("mobile-hint").textContent="Tocá el auto amarillo para lanzar · Fondo para mover · Pellizcá para zoom";
+ if(!navigate.pointers.size)$("mobile-hint").textContent="Tocá tu auto para lanzar · Fondo para mover · Pellizcá para zoom";
 });
 canvas.addEventListener("pointercancel",ev=>{
  if(drag){
-   if(ev.pointerId===drag.id){stopTouch();$("mobile-hint").textContent="Auto amarillo = lanzar · Fondo = mover · Dos dedos = zoom";}
+   if(ev.pointerId===drag.id){stopTouch();$("mobile-hint").textContent="Tu auto = lanzar · Fondo = mover · Dos dedos = zoom";}
    else if(steer&&ev.pointerId===steer.id)steer=null;
  }else if(navigate.pointers.has(ev.pointerId)){
    navigate.pointers.delete(ev.pointerId);navigate.pinch=null;
@@ -1016,7 +1041,8 @@ function renderGrid(){
     const info=document.createElement("span");info.className="grid-pilot-info";
     const name=document.createElement("strong");name.textContent=entry.id==="human"?"VOS":entry.name;
     const detail=document.createElement("small");
-    detail.textContent="Avance "+Math.max(0,entry.progress/view.courseLength*100).toFixed(1)+"% · "+entry.hits+" impulsos";
+    // Non-breaking spaces: on narrow cards the line only breaks after the "·".
+    detail.textContent="Avance\u00a0"+Math.max(0,entry.progress/view.courseLength*100).toFixed(1)+"%\u00a0· "+entry.hits+"\u00a0impulsos";
     info.append(name,detail);row.append(num,dot,info);results.append(row);
   }
   $("grid-modal").hidden=false;
@@ -1063,10 +1089,7 @@ function renderChampionship(){
  });
  const results=$("championship-table");results.replaceChildren();
  const table=season?.table||[
-   {id:"human",name:"VOS",color:"#f6bd3e"},
-   ...["ROJO","AZUL","VERDE","VIOLETA","NARANJA","PLATA","TURQUESA"].map((name,i)=>({
-     id:"cpu"+(i+1),name,color:["#f04e58","#39bae6","#35ce9e","#b68df3","#f49c55","#c5d3e0","#37c6cb"][i]
-   }))
+   ...(view?.cars||[]).map(car=>({id:car.id,name:car.name,color:car.color}))
  ].map((row,i)=>({...row,position:i+1,points:0,events:[]}));
  for(const row of table){
    const node=document.createElement("div");node.className="champ-row"+(row.id==="human"?" human":"");
@@ -1217,6 +1240,20 @@ document.addEventListener("keydown",ev=>{
 $("reset").addEventListener("click",reset);
 $("quick-reset").addEventListener("click",reset);
 $("play-again").addEventListener("click",reset);
+const PAINT_NAMES={"#f6bd3e":"Amarillo","#f04e58":"Rojo","#39bae6":"Celeste","#35ce9e":"Verde","#b68df3":"Violeta",
+ "#f49c55":"Naranja","#c5d3e0":"Plata","#37c6cb":"Turquesa","#ff6fae":"Rosa","#a6e04a":"Lima","#f4f6f8":"Blanco","#2f6bff":"Azul"};
+function renderPaint(){
+ const box=$("paint-swatches");if(!box||!view)return;
+ box.replaceChildren();
+ for(const color of view.carColors||[]){
+   const b=document.createElement("button");b.type="button";b.className="paint-swatch";
+   b.style.background=color;b.title=PAINT_NAMES[color]||color;
+   b.setAttribute("aria-label","Pintar tu auto: "+(PAINT_NAMES[color]||color));
+   b.setAttribute("aria-pressed",String(color===view.carColor));
+   b.addEventListener("click",()=>{if(color!==view.carColor){tone(620,.05,"triangle");send({type:"action",action:{type:"paintCar",color}});}});
+   box.append(b);
+ }
+}
 function openSettings(){
  $("rivals-modal").hidden=true;
  if(!$("garage-modal").hidden)hideGarage();
@@ -1228,6 +1265,7 @@ function openSettings(){
  $("track-select").value=config.track||"valley";
  syncCircuitCards();
  $("race-mode-select").value="qualifying";
+ renderPaint();
  const season=view?.championship,locked=season&&season.status!=="complete";
  $("race-mode-select").disabled=!!locked;
  $("track-select").disabled=!!locked;

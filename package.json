@@ -1,0 +1,14 @@
+{
+  "name": "flick-gp",
+  "version": "0.7.5",
+  "private": true,
+  "type": "module",
+  "description": "FLICK GP — juego estático, sin build ni dependencias. Estos scripts son solo herramientas de prueba.",
+  "scripts": {
+    "golden": "node tools/golden.mjs",
+    "golden:update": "node tools/golden.mjs --update",
+    "sim": "node tools/sim.mjs",
+    "perf": "node tools/perf.mjs",
+    "test": "node tools/nearest-test.mjs && node tools/migrate-test.mjs && node tools/turn-test.mjs && node tools/golden.mjs"
+  }
+}

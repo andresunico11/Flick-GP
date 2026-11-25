@@ -3,7 +3,9 @@
  * One human and seven CPU drivers each take exactly one stroke per round.
  * All input is validated server-side. The physics is simulated at fixed steps.
  */
-export const meta = { game: "FLICK GP", minPlayers: 1, maxPlayers: 1 };
+// Single source of truth for the game version (UI, <title>, saves). Bump it here only.
+export const VERSION="0.7.5";
+export const meta = { game: "FLICK GP", version: VERSION, minPlayers: 1, maxPlayers: 1 };
 
 const TRACKS={
   valley:{
@@ -45,7 +47,16 @@ const TRACKS={
   }
 };
 function selectedTrack(config){return TRACKS[config?.track]||TRACKS.valley;}
+// Weather only depends on the track and round%6, so each forecast is computed once.
+const WEATHER=new Map();
 function weatherFor(track,round){
+  let cycle=WEATHER.get(track);
+  if(!cycle)WEATHER.set(track,cycle=[]);
+  const slot=((round%6)+6)%6;
+  if(!Number.isInteger(round))return forecast(track,round);
+  return cycle[slot]||(cycle[slot]=forecast(track,round));
+}
+function forecast(track,round){
   // Weather is deterministic: every client derives the same forecast from round.
   if(track.theme==="alps")
     return {code:"frost",label:round%6<3?"HELADA":"NIEVE",intensity:.72};
@@ -100,6 +111,7 @@ function careerFrom(input){
     championshipsPlayed:Number.isInteger(c.championshipsPlayed)&&c.championshipsPlayed>=0?c.championshipsPlayed:0,
     championshipsWon:Number.isInteger(c.championshipsWon)&&c.championshipsWon>=0?c.championshipsWon:0,
     lastChampionship:c.lastChampionship&&typeof c.lastChampionship==="object"?c.lastChampionship:null,
+    carColor:carColor(c),
     history:Array.isArray(c.history)?c.history.slice(-10):[]
   };
 }
@@ -169,23 +181,130 @@ function sample(s,track){
   const tx=(b.x-a.x)/seg,ty=(b.y-a.y)/seg;
   return { x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,tx,ty,nx:-ty,ny:tx };
 }
-function nearest(x,y,track){
-  let best=Infinity, result=null;
-  const pts=activeRoad(track).points;
+// Closest point on the centre line. This is the hottest function of the game
+// (CPU planning calls it ~650k times per round), so each road gets a spatial grid:
+// every cell lists, in ascending order, ONLY the segments that can be the nearest
+// one for some point inside that cell. The query then runs the exact same
+// arithmetic and strict "<" tie-break over that subset, so the result is
+// bit-for-bit identical to scanning all segments (see tools/nearest-test.mjs).
+// This is safe where two stretches run close together (Desierto Rojo s≈383 vs
+// s≈1482): the cell list is built from distance bounds, never from the last index.
+const GRID_CELL=24,GRID_MARGIN=260,GRID_EPS=1e-6;
+function segmentDistance(x,y,a,b){
+  const dx=b.x-a.x,dy=b.y-a.y,seg2=dx*dx+dy*dy;
+  const t=seg2>0?Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/seg2)):0;
+  return Math.hypot(x-(a.x+t*dx),y-(a.y+t*dy));
+}
+function rectSegmentDistance(x0,y0,x1,y1,a,b){
+  // Liang–Barsky: does the segment cross the rectangle at all?
+  let t0=0,t1=1;const dx=b.x-a.x,dy=b.y-a.y;
+  const clip=(p,q)=>{
+    if(p===0)return q>=0;
+    const r=q/p;
+    if(p<0){if(r>t1)return false;if(r>t0)t0=r;}
+    else{if(r<t0)return false;if(r<t1)t1=r;}
+    return true;
+  };
+  if(clip(-dx,a.x-x0)&&clip(dx,x1-a.x)&&clip(-dy,a.y-y0)&&clip(dy,y1-a.y))return 0;
+  // Disjoint convex shapes: the gap is between a vertex of one and an edge of the other.
+  const toRect=p=>Math.hypot(Math.max(x0-p.x,0,p.x-x1),Math.max(y0-p.y,0,p.y-y1));
+  return Math.min(toRect(a),toRect(b),segmentDistance(x0,y0,a,b),segmentDistance(x1,y0,a,b),
+    segmentDistance(x0,y1,a,b),segmentDistance(x1,y1,a,b));
+}
+function buildGrid(road){
+  const pts=road.points,n=pts.length;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const p of pts){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}
+  minX-=GRID_MARGIN;minY-=GRID_MARGIN;
+  const cols=Math.ceil((maxX+GRID_MARGIN-minX)/GRID_CELL),rows=Math.ceil((maxY+GRID_MARGIN-minY)/GRID_CELL);
+  const half=GRID_CELL*Math.SQRT1_2;
+  const start=new Uint32Array(cols*rows+1),lists=[];
+  const lower=new Float64Array(n);
+  let total=0;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const x0=minX+c*GRID_CELL,y0=minY+r*GRID_CELL,cx=x0+GRID_CELL/2,cy=y0+GRID_CELL/2;
+    // centre[i]-half is a lower bound of segment i's distance for ANY point of the
+    // cell (distance is 1-Lipschitz). Distance to a segment is also convex, so its
+    // maximum over the cell sits at a corner: the smallest such maximum ("upper")
+    // is a distance the true nearest segment always beats inside this cell.
+    let closest=Infinity;
+    for(let i=0;i<n;i++){
+      lower[i]=segmentDistance(cx,cy,pts[i],pts[(i+1)%n]);
+      if(lower[i]<closest)closest=lower[i];
+    }
+    let upper=closest+half;
+    for(let i=0;i<n;i++){
+      if(lower[i]>closest+2*half)continue; // its corner maximum cannot be smaller
+      const a=pts[i],b=pts[(i+1)%n];
+      const far=Math.max(segmentDistance(x0,y0,a,b),segmentDistance(x0+GRID_CELL,y0,a,b),
+        segmentDistance(x0,y0+GRID_CELL,a,b),segmentDistance(x0+GRID_CELL,y0+GRID_CELL,a,b));
+      if(far<upper)upper=far;
+    }
+    const limit=upper+GRID_EPS*(1+upper),cell=[];
+    for(let i=0;i<n;i++){
+      if(lower[i]-half>limit)continue; // quick reject
+      // Exact smallest distance between the segment and the cell rectangle.
+      if(rectSegmentDistance(x0,y0,x0+GRID_CELL,y0+GRID_CELL,pts[i],pts[(i+1)%n])<=limit)cell.push(i);
+    }
+    lists.push(cell);total+=cell.length;
+    start[r*cols+c+1]=total;
+  }
+  const index=new Uint16Array(total);
+  let k=0;for(const cell of lists)for(const i of cell)index[k++]=i;
+  // Per-segment constants, computed with exactly the same expressions as the scan.
+  const ax=new Float64Array(n),ay=new Float64Array(n),sx=new Float64Array(n),sy=new Float64Array(n),s2=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    const a=pts[i],b=pts[(i+1)%n];
+    ax[i]=a.x;ay[i]=a.y;sx[i]=b.x-a.x;sy[i]=b.y-a.y;s2[i]=sx[i]*sx[i]+sy[i]*sy[i];
+  }
+  return {minX,minY,cols,rows,start,index,ax,ay,sx,sy,s2};
+}
+const GRIDS=new Map();
+function gridFor(road){
+  let grid=GRIDS.get(road);
+  if(!grid){grid=buildGrid(road);GRIDS.set(road,grid);}
+  return grid;
+}
+// Reference scan over every segment (the 0.7.4 algorithm). Fallback outside the grid.
+function nearestFull(x,y,pts,out){
+  let best=Infinity,bi=-1,bt=0;
   for(let i=0;i<pts.length;i++){
     const a=pts[i], b=pts[(i+1)%pts.length];
     const dx=b.x-a.x,dy=b.y-a.y,seg2=dx*dx+dy*dy;
     const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/seg2));
     const px=a.x+t*dx,py=a.y+t*dy;
     const d2=(x-px)*(x-px)+(y-py)*(y-py);
-    if(d2<best){
-      const len=Math.sqrt(seg2);
-      best=d2;
-      result={d:Math.sqrt(d2),s:a.s+t*len,x:px,y:py,nx:-dy/len,ny:dx/len,
-        curvature:(a.curvature||0)*(1-t)+(b.curvature||0)*t};
-    }
+    if(d2<best){best=d2;bi=i;bt=t;}
   }
-  return result;
+  return bi<0?null:fillNearest(pts,bi,bt,best,out);
+}
+function fillNearest(pts,i,t,d2,out){
+  const a=pts[i],b=pts[(i+1)%pts.length];
+  const dx=b.x-a.x,dy=b.y-a.y,len=Math.sqrt(dx*dx+dy*dy);
+  out.d=Math.sqrt(d2);out.s=a.s+t*len;out.x=a.x+t*dx;out.y=a.y+t*dy;
+  out.nx=-dy/len;out.ny=dx/len;
+  out.curvature=(a.curvature||0)*(1-t)+(b.curvature||0)*t;
+  return out;
+}
+// Writes into `out` (reused by impulse() to avoid one allocation per physics step).
+function nearestTo(x,y,road,out){
+  const pts=road.points,grid=gridFor(road);
+  const c=Math.floor((x-grid.minX)/GRID_CELL),r=Math.floor((y-grid.minY)/GRID_CELL);
+  if(!(c>=0&&c<grid.cols&&r>=0&&r<grid.rows))return nearestFull(x,y,pts,out);
+  const cell=r*grid.cols+c,end=grid.start[cell+1],index=grid.index;
+  const AX=grid.ax,AY=grid.ay,SX=grid.sx,SY=grid.sy,S2=grid.s2;
+  let best=Infinity,bi=-1,bt=0;
+  for(let k=grid.start[cell];k<end;k++){
+    const i=index[k],ax=AX[i],ay=AY[i],dx=SX[i],dy=SY[i];
+    const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/S2[i]));
+    const px=ax+t*dx,py=ay+t*dy;
+    const d2=(x-px)*(x-px)+(y-py)*(y-py);
+    if(d2<best){best=d2;bi=i;bt=t;}
+  }
+  return bi<0?nearestFull(x,y,pts,out):fillNearest(pts,bi,bt,best,out);
+}
+function nearest(x,y,track){
+  return nearestTo(x,y,activeRoad(track),{d:0,s:0,x:0,y:0,nx:0,ny:0,curvature:0});
 }
 // Same resource model for the human and all CPU opponents.
 function energy(car){ return Math.max(0,Math.min(100,Number.isFinite(car.energy)?car.energy:100)); }
@@ -210,18 +329,36 @@ function afterShot(car,power,bumps,surface,options,career,curve=0){
     tireHealth:+Math.max(0,condition-wear).toFixed(2)
   };
 }
+// Paint and names are cosmetic: the AI personality is bound to the car id (cpu1…cpu7),
+// never to its colour, so the player can pick any colour, rival colours included.
 const PALETTE=["#f6bd3e","#f04e58","#39bae6","#35ce9e","#b68df3","#f49c55","#c5d3e0","#37c6cb"];
-const NAMES=["VOS","ROJO","AZUL","VERDE","VIOLETA","NARANJA","PLATA","TURQUESA"];
+const NAMES=["VOS","BRUNO","SOFÍA","TOMÁS","LUCÍA","MATEO","PAULA","CAMILA"];
+const DEFAULT_CAR_COLOR=PALETTE[0];
+const CAR_COLORS=[...PALETTE,"#ff6fae","#a6e04a","#f4f6f8","#2f6bff"];
+function carColor(career){
+  const value=career?.carColor;
+  return CAR_COLORS.includes(value)?value:DEFAULT_CAR_COLOR;
+}
+// Rivals keep their usual paint; whoever shares the player's colour takes the
+// player's default yellow instead, so every car on track stays distinguishable.
+function liveryFor(index,career){
+  const mine=carColor(career);
+  if(index===0)return {name:NAMES[0],color:mine};
+  const usual=PALETTE[index];
+  return {name:NAMES[index],color:usual===mine?DEFAULT_CAR_COLOR:usual};
+}
+function carIndex(id){return id==="human"?0:Number(String(id).replace("cpu",""))||0;}
+function dressed(car,career){return {...car,...liveryFor(carIndex(car.id),career)};}
 // Seven rivals have distinct personalities. Their tyres, wings and launch limits
 // obey exactly the same physics and energy rules as the human car.
 const CPU_PROFILES=[
- {id:"cpu1",style:"ATAQUE",title:"ROJO · EL ATACANTE",tactic:"Arriesga en rectas y persigue adelantamientos",aggression:1.00,risk:.76,energy:.55,precision:.04},
- {id:"cpu2",style:"TRAZADA",title:"AZUL · EL PRECISO",tactic:"Calcula la entrada a curva y prioriza la línea ideal",aggression:.64,risk:1.55,energy:.79,precision:.0},
- {id:"cpu3",style:"AHORRO",title:"VERDE · EL ESTRATEGA",tactic:"Guarda reserva para las últimas curvas",aggression:.48,risk:1.75,energy:1.45,precision:.035},
- {id:"cpu4",style:"ADAPTACIÓN",title:"VIOLETA · EL ADAPTABLE",tactic:"Ajusta el impulso a la superficie y al clima",aggression:.69,risk:1.15,energy:.89,precision:.012},
- {id:"cpu5",style:"ADELANTAR",title:"NARANJA · EL OPORTUNISTA",tactic:"Busca huecos cuando encuentra tráfico",aggression:.98,risk:.87,energy:.77,precision:.018},
- {id:"cpu6",style:"REGULARIDAD",title:"PLATA · EL CONSTANTE",tactic:"Evita choques y mantiene un ritmo equilibrado",aggression:.60,risk:1.48,energy:1.04,precision:.006},
- {id:"cpu7",style:"EFECTO",title:"TURQUESA · EL ESPECIALISTA",tactic:"Aprovecha los efectos curvos para recortar camino",aggression:.86,risk:1.10,energy:.83,precision:.014}
+ {id:"cpu1",style:"ATAQUE",title:"BRUNO · EL ATACANTE",tactic:"Arriesga en rectas y persigue adelantamientos",aggression:1.00,risk:.76,energy:.55,precision:.04},
+ {id:"cpu2",style:"TRAZADA",title:"SOFÍA · LA PRECISA",tactic:"Calcula la entrada a curva y prioriza la línea ideal",aggression:.64,risk:1.55,energy:.79,precision:.0},
+ {id:"cpu3",style:"AHORRO",title:"TOMÁS · EL ESTRATEGA",tactic:"Guarda reserva para las últimas curvas",aggression:.48,risk:1.75,energy:1.45,precision:.035},
+ {id:"cpu4",style:"ADAPTACIÓN",title:"LUCÍA · LA ADAPTABLE",tactic:"Ajusta el impulso a la superficie y al clima",aggression:.69,risk:1.15,energy:.89,precision:.012},
+ {id:"cpu5",style:"ADELANTAR",title:"MATEO · EL OPORTUNISTA",tactic:"Busca huecos cuando encuentra tráfico",aggression:.98,risk:.87,energy:.77,precision:.018},
+ {id:"cpu6",style:"REGULARIDAD",title:"PAULA · LA CONSTANTE",tactic:"Evita choques y mantiene un ritmo equilibrado",aggression:.60,risk:1.48,energy:1.04,precision:.006},
+ {id:"cpu7",style:"EFECTO",title:"CAMILA · LA ESPECIALISTA",tactic:"Aprovecha los efectos curvos para recortar camino",aggression:.86,risk:1.10,energy:.83,precision:.014}
 ];
 function cpuProfile(car){
  return CPU_PROFILES.find(p=>p.id===car.id)||CPU_PROFILES[0];
@@ -265,7 +402,7 @@ export function setup(players, options){
     const row=Math.floor(i/4),lane=lanes[i%4],offset=-row*76;
     const start=sample(offset,track);
     return {
-      id:i===0?"human":"cpu"+i,name:NAMES[i],color:PALETTE[i],
+      id:i===0?"human":"cpu"+i,...liveryFor(i,career),
       x:+(start.x+start.nx*lane).toFixed(2),y:+(start.y+start.ny*lane).toFixed(2),
       angle:Math.atan2(start.ty,start.tx),progress:offset,
       hits:0,finishedAt:null,collisions:0,energy:100,tireHealth:100,
@@ -398,6 +535,8 @@ function completeGrandPrix(state,cars,ranked,round,career){
 export function validateAction(state,playerId,action){
   if(playerId!==state.human) return {ok:false,error:"No controlás este auto."};
   if(!action||typeof action!=="object")return {ok:false,error:"Acción inválida."};
+  if(action.type==="paintCar")
+    return CAR_COLORS.includes(action.color)?{ok:true}:{ok:false,error:"Color no disponible."};
   const champ=state.championship;
   const activeChamp=!!champ&&champ.status!=="complete";
   if(action.type==="startChampionship"){
@@ -472,10 +611,15 @@ function surfaceAt(x,y,near,track,road){
   if(near.d>off)return inSand(x,y,track)?"sand":"grass";
   if(near.d>=edge)return "kerb";
   const ratio=near.s/road.length;
-  if(track.ice?.some(([a,b])=>ratio>=a&&ratio<=b))return "ice";
-  if(track.dirt?.some(([a,b])=>ratio>=a&&ratio<=b))return "dirt";
-  if(track.base==="wet"||track.wet?.some(([a,b])=>ratio>=a&&ratio<=b))return "wet";
+  if(inZone(track.ice,ratio))return "ice";
+  if(inZone(track.dirt,ratio))return "dirt";
+  if(track.base==="wet"||inZone(track.wet,ratio))return "wet";
   return "asphalt";
+}
+function inZone(zones,ratio){
+  if(!zones)return false;
+  for(let i=0;i<zones.length;i++)if(ratio>=zones[i][0]&&ratio<=zones[i][1])return true;
+  return false;
 }
 function impulse(car,angle,power,obstacles,options,track,round,collectTrace=true,career=null,curve=0){
   const selected=car.id==="human"?options:{...DEFAULTS,...car.loadout};
@@ -485,42 +629,61 @@ function impulse(car,angle,power,obstacles,options,track,round,collectTrace=true
   const engineLevel=car.id==="human"?(career?.upgrades?.engine||0):0;
   const launch=(1.5+power*10.5)*wing.launch*(1+.027*engineLevel);
   let x=car.x,y=car.y, vx=Math.cos(angle)*launch,vy=Math.sin(angle)*launch;
-  let lastS=nearest(x,y,track).s,progress=car.progress,finishedAt=car.finishedAt;
+  const near={d:0,s:0,x:0,y:0,nx:0,ny:0,curvature:0}; // reused every step
+  let lastS=nearestTo(x,y,road,near).s,progress=car.progress,finishedAt=car.finishedAt;
   let distanceUnits=car.distanceUnits||0;
-  const lapSplits=Array.isArray(car.lapSplits)?car.lapSplits.map(split=>({...split})):[];
+  // Splits are never mutated, so planning runs (no trace) only need a shallow copy.
+  const lapSplits=!Array.isArray(car.lapSplits)?[]:
+    collectTrace?car.lapSplits.map(split=>({...split})):car.lapSplits.slice();
+  // Loop invariants: same values and same operation order as computing them per step.
+  const halfL=L/2,wallRadius=track.wallRadius||110,condition0=tireHealth(car);
+  const gripLevel=car.id==="human"?(career?.upgrades?.grip||0):0;
+  const gripBase=Math.max(.35,condition0/100)*(selected.tire==="soft"?1.04:selected.tire==="hard"?.93:1)
+    *(selected.wing==="high"?1.23:selected.wing==="low"?.82:1);
+  const gripUpgrade=1+.085*gripLevel,wetGrip=1-weather.intensity*.33;
+  const wearBase=1-condition0/100,rainDrag=weather.intensity*.006,curveDrag=Math.abs(curve)*.0019;
+  const curved=Math.abs(curve)>.001;
   let crossedLaps=0;
   let bumps=0,terrain="asphalt",offTrackFrames=0,cornerLoad=0;
   const trace=collectTrace?[[+x.toFixed(2),+y.toFixed(2)]]:null;
+  // hypot(vx,vy) from the end of the previous step is reused as this step's speed
+  // unless a wall or a car changed the velocity in between (same inputs → same value).
+  let lastSpeed=Math.hypot(vx,vy),velocityChanged=false;
   for(let step=0;step<390;step++){
     const previousX=x,previousY=y;
+    velocityChanged=false;
     x+=vx; y+=vy;
-    const near=nearest(x,y,track);
+    nearestTo(x,y,road,near);
     const dsRaw=near.s-lastS;
     let ds=dsRaw;
-    if(ds>L/2)ds-=L;
-    if(ds< -L/2)ds+=L;
+    if(ds>halfL)ds-=L;
+    if(ds< -halfL)ds+=L;
     if(Math.abs(ds)<=32)progress+=ds;
     lastS=near.s;
-    const wallRadius=track.wallRadius||110;
     if(near.d>wallRadius){
       const nx=(x-near.x)/near.d,ny=(y-near.y)/near.d;
       x=near.x+nx*(wallRadius-1); y=near.y+ny*(wallRadius-1);
       const outward=vx*nx+vy*ny;
-      if(outward>0){vx-=1.49*wing.bounce*outward*nx;vy-=1.49*wing.bounce*outward*ny;bumps++;}
+      if(outward>0){vx-=1.49*wing.bounce*outward*nx;vy-=1.49*wing.bounce*outward*ny;bumps++;velocityChanged=true;}
     }
-    for(const other of obstacles){
+    for(let o=0;o<obstacles.length;o++){
+      const other=obstacles[o];
       if(other.id===car.id)continue;
-      const dx=x-other.x,dy=y-other.y, dist=Math.hypot(dx,dy);
+      const dx=x-other.x,dy=y-other.y;
+      // hypot(dx,dy) >= max(|dx|,|dy|): such pairs can never be within 25.
+      if(dx>=25||dx<=-25||dy>=25||dy<=-25)continue;
+      const dist=Math.hypot(dx,dy);
       if(dist<25 && dist>0.01){
         const nx=dx/dist,ny=dy/dist;
         x=other.x+nx*25;y=other.y+ny*25;
         const into=vx*nx+vy*ny;
-        if(into<0){vx-=1.44*into*nx;vy-=1.44*into*ny;bumps++;}
+        if(into<0){vx-=1.44*into*nx;vy-=1.44*into*ny;bumps++;velocityChanged=true;}
       }
     }
     // Accumulate actual path length (not ranking progress); detours count.
-    distanceUnits+=Math.hypot(x-previousX,y-previousY);
-    const completed=Math.max(lapSplits.length,lapsOf({progress},L));
+    // Only reported in the car summary, which planning runs (no trace) never read.
+    if(collectTrace)distanceUnits+=Math.hypot(x-previousX,y-previousY);
+    const completed=Math.max(lapSplits.length,Math.max(0,Math.min(LAPS,Math.floor((progress+0.00001)/L))));
     if(completed>lapSplits.length){
       for(let lap=lapSplits.length+1;lap<=completed;lap++){
         const km=distanceUnits/L*track.lapKm;
@@ -535,14 +698,13 @@ function impulse(car,angle,power,obstacles,options,track,round,collectTrace=true
     if(surface==="sand")terrain="sand";
     else if(surface==="grass"&&terrain!=="sand")terrain="grass";
     else if(surface==="dirt"&&terrain==="asphalt")terrain="dirt";
-    if(!["asphalt","wet","ice","dirt"].includes(surface))offTrackFrames++;
-    const speed=Math.hypot(vx,vy);
+    const onRoad=surface==="asphalt"||surface==="wet"||surface==="ice"||surface==="dirt";
+    if(!onRoad)offTrackFrames++;
+    const speed=velocityChanged?Math.hypot(vx,vy):lastSpeed;
     const signedBend=near.curvature;
-    const gripLevel=car.id==="human"?(career?.upgrades?.grip||0):0;
-    const grip=Math.max(.35,tireHealth(car)/100)*(selected.tire==="soft"?1.04:selected.tire==="hard"?.93:1)
-      *(selected.wing==="high"?1.23:selected.wing==="low"?.82:1)
-      *(surface==="ice"?.57:surface==="wet"?1-weather.intensity*.33:surface==="dirt"?.79:1)
-      *(1+.085*gripLevel);
+    const grip=gripBase
+      *(surface==="ice"?.57:surface==="wet"?wetGrip:surface==="dirt"?.79:1)
+      *gripUpgrade;
     // Speed-squared understeer: stronger shots push wider on tight bends.
     // Direction and magnitude come from course geometry, not randomness.
     if(near.d<101 && speed>3 && Math.abs(signedBend)>.001){
@@ -554,7 +716,7 @@ function impulse(car,angle,power,obstacles,options,track,round,collectTrace=true
     // Curved flick: rotate the velocity vector at every physics step.
     // The angle is deterministic, limited by grip and increasingly harder on fast, wet or dirty track.
     // No sideways teleporting: the car keeps momentum and naturally follows an arc.
-    if(Math.abs(curve)>.001 && speed>.14){
+    if(curved && speed>.14){
       const gripFactor=Math.max(.34,Math.min(1.14,grip));
       const speedFactor=1/(1+Math.max(0,speed-7)*.047);
       const turn=curve*.021*gripFactor*speedFactor;
@@ -563,21 +725,28 @@ function impulse(car,angle,power,obstacles,options,track,round,collectTrace=true
       vy=vx*sin+vy*cos;vx=nextVX;
       cornerLoad+=Math.abs(turn)*.38;
     }
-    const wearPenalty=(1-tireHealth(car)/100)*(["asphalt","wet","ice","dirt","kerb"].includes(surface)?.019:.007);
+    const wearPenalty=wearBase*(onRoad||surface==="kerb"?.019:.007);
     // A fast ride over kerbs, grass or sand bleeds speed much quicker.
     const surfaceDrag=(surface==="kerb"||surface==="grass"||surface==="sand")
       ?Math.max(0,(speed-5)*.0014*(surface==="sand"?2.2:1.3)):0;
-    const rainPenalty=surface==="wet"?weather.intensity*.006:0;
-    const drag=Math.max(.77,Math.min(.985,tire[surface]+wing.air-wearPenalty-surfaceDrag-rainPenalty-Math.abs(curve)*.0019));
+    const rainPenalty=surface==="wet"?rainDrag:0;
+    const drag=Math.max(.77,Math.min(.985,tire[surface]+wing.air-wearPenalty-surfaceDrag-rainPenalty-curveDrag));
     vx*=drag;vy*=drag;
     if(collectTrace&&step%3===0)trace.push([+x.toFixed(2),+y.toFixed(2)]);
-    if(Math.hypot(vx,vy)<0.14)break;
+    lastSpeed=Math.hypot(vx,vy);
+    if(lastSpeed<0.14)break;
   }
   if(collectTrace)trace.push([+x.toFixed(2),+y.toFixed(2)]);
   const condition=afterShot(car,power,bumps,terrain,selected,career,curve);
   if(crossedLaps>0)condition.energy=100; // Recharge at the finish line of each lap.
   const risk=bumps>0||offTrackFrames>44?"high":
     offTrackFrames>15||cornerLoad>2.5?"medium":"low";
+  if(!collectTrace){
+    // Planning run (cpuShot): only the outcome is read, so skip copying the whole car.
+    return {car:{...condition,x:+x.toFixed(2),y:+y.toFixed(2),progress:+progress.toFixed(2),
+      collisions:car.collisions+bumps,finishedAt,lapsCompleted:lapSplits.length},
+      trace,bumps,risk,offTrackFrames,cornerLoad:+cornerLoad.toFixed(2),lapCrossings:crossedLaps};
+  }
   return {
     car:{...car,...condition,x:+x.toFixed(2),y:+y.toFixed(2),angle:Math.atan2(vy,vx)||angle,
       progress:+progress.toFixed(2),hits:car.hits+1,collisions:car.collisions+bumps,
@@ -652,6 +821,11 @@ function cpuShot(car,index,round,difficulty,obstacles,track){
   return {angle,power:option.power,curve:option.curve};
 }
 export function applyAction(state,playerId,action){
+  if(action.type==="paintCar"){
+    // Cosmetic only: repaint every car (rivals may swap to avoid a clash).
+    const career={...careerFrom(state.career),carColor:action.color};
+    return {...state,career,cars:state.cars.map(car=>dressed(car,career))};
+  }
   if(action.type==="startChampionship")return createChampionship(state,action.cup);
   if(action.type==="nextGrandPrix")return nextGrandPrix(state);
   if(action.type==="abandonChampionship"){
@@ -667,38 +841,69 @@ export function applyAction(state,playerId,action){
   }
   if(action.type==="startQualifying")return startQualifying(state);
   if(action.type==="quickRace")return {...setup([state.human],state),mode:"quick"};
-  if(action.type==="startRace")return {...state,phase:"racing",round:0,lastMoves:[],
+  if(action.type==="startRace")return countMoves(state,beginRound({...state,phase:"racing",round:0,lastMoves:[],
     cars:state.cars.map(car=>({...car,energy:100,tireHealth:100,hits:0})),
-    winner:null};
+    winner:null,turn:null}));
   if(action.type==="upgrade"){
     const career=careerFrom(state.career);
     const part=SHOP[action.upgrade],level=career.upgrades[action.upgrade],price=part.costs[level];
     return {...state,career:{...career,credits:career.credits-price,
       upgrades:{...career.upgrades,[action.upgrade]:level+1}}};
   }
-  if(state.phase==="qualifying")return applyQualifying(state,action);
-  const career=careerFrom(state.career);
-  const config=equipment(state.config),track=selectedTrack(config),L=activeRoad(track).length;
+  if(state.phase==="qualifying")return countMoves(state,applyQualifying(state,action));
+  return countMoves(state,playRound(state,action));
+}
+// Every batch of new moves gets a sequence number so the client knows what to animate.
+function countMoves(before,after){
+  return after.lastMoves!==before.lastMoves&&after.lastMoves?.length?
+    {...after,moveSeq:(before.moveSeq||0)+1}:after;
+}
+// Race turn order: the leader shoots first, then each car in race position. Ties
+// (same row on the grid) follow the starting grid. Cars ahead of the player move
+// BEFORE the player aims, so you never shoot into a car that has not left yet.
+function turnOrder(state){
+  const grid=state.qualification?.order;
+  const slot=car=>{const k=grid?grid.indexOf(car.id):-1;return k>=0?k:state.cars.indexOf(car);};
+  return [...state.cars].sort((a,b)=>raceOrder(a,b)||slot(a)-slot(b)).map(car=>car.id);
+}
+function raceMove(cars,i,action,round,config,track,career){
+  const car=cars[i];
+  // A finished car has already crossed the line in a previous round;
+  // its place stays fixed, while others can finish this equal-strokes round.
+  if(car.finishedAt!==null && round+1>car.finishedAt)
+    return {id:car.id,trace:[[car.x,car.y]],angle:car.angle,power:0,bumps:0,lapCrossings:0};
+  const recommended=i===0?action:cpuShot(car,i,round,config.difficulty,cars,track);
+  const shot={...recommended,power:Math.min(maxPower(car),recommended.power)};
+  const curve=shot.curve??0;
+  const res=impulse(car,shot.angle,shot.power,cars,config,track,round,true,career,curve);
+  cars[i]=res.car;
+  return {id:car.id,trace:res.trace,angle:shot.angle,power:shot.power,curve,bumps:res.bumps,
+    energy:res.car.energy,tireHealth:res.car.tireHealth,
+    risk:res.risk,offTrackFrames:res.offTrackFrames,cornerLoad:res.cornerLoad,
+    lapCrossings:res.lapCrossings,distanceKm:res.car.distanceKm,lapsCompleted:res.car.lapsCompleted};
+}
+function moveIds(state,cars,ids,action){
+  const config=equipment(state.config),track=selectedTrack(config),career=careerFrom(state.career);
+  return ids.map(id=>raceMove(cars,cars.findIndex(c=>c.id===id),action,state.round,config,track,career));
+}
+// Opens a racing round: the cars ahead of the player take their shot right away.
+function beginRound(state){
+  if(state.phase!=="racing")return state;
+  const order=turnOrder(state),ahead=order.slice(0,order.indexOf("human"));
   const cars=state.cars.map(c=>({...c}));
-  const moves=[];
-  for(let i=0;i<cars.length;i++){
-    const car=cars[i];
-    const recommended=i===0?action:cpuShot(car,i,state.round,config.difficulty,cars,track);
-    const shot={...recommended,power:Math.min(maxPower(car),recommended.power)};
-    // A finished car has already crossed the line in a previous round;
-    // its place stays fixed, while others can finish this equal-strokes round.
-    if(car.finishedAt!==null && state.round+1>car.finishedAt){
-      moves.push({id:car.id,trace:[[car.x,car.y]],angle:car.angle,power:0,bumps:0,lapCrossings:0});
-      continue;
-    }
-    const curve=shot.curve??0;
-    const res=impulse(car,shot.angle,shot.power,cars,config,track,state.round,true,career,curve);
-    cars[i]=res.car;
-    moves.push({id:car.id,trace:res.trace,angle:shot.angle,power:shot.power,curve,bumps:res.bumps,
-      energy:res.car.energy,tireHealth:res.car.tireHealth,
-      risk:res.risk,offTrackFrames:res.offTrackFrames,cornerLoad:res.cornerLoad,
-      lapCrossings:res.lapCrossings,distanceKm:res.car.distanceKm,lapsCompleted:res.car.lapsCompleted});
-  }
+  const moves=moveIds(state,cars,ahead,null);
+  return {...state,cars,turn:{round:state.round,order},
+    lastMoves:[...(state.lastMoves||[]),...moves]};
+}
+function playRound(state,action){
+  const career=careerFrom(state.career);
+  const config=equipment(state.config);
+  const cars=state.cars.map(c=>({...c}));
+  // Saves from before 0.7.5 have no open turn: the cars ahead move now, still first.
+  const open=state.turn?.round===state.round?state.turn:null;
+  const order=open?open.order:turnOrder(state);
+  const from=open?order.indexOf("human"):0;
+  const moves=moveIds(state,cars,order.slice(from),action);
   const round=state.round+1;
   const finished=cars.filter(c=>c.finishedAt!==null);
   const over=finished.length>0 || round>=state.maxRounds;
@@ -711,8 +916,9 @@ export function applyAction(state,playerId,action){
     championship=finish.championship;
     reward=finish.career;
   }
-  return {...state,cars,round,career:reward,championship,
+  const next={...state,cars,round,career:reward,championship,turn:null,
     phase:over?"finished":"racing",winner:over?ranked[0].id:null,lastMoves:moves};
+  return over?next:beginRound(next);
 }
 export function isGameOver(state){
   // Between GPs the room remains actionable so we can advance without resetting.
@@ -721,17 +927,26 @@ export function isGameOver(state){
 }
 export function viewFor(state,playerId){
   const track=selectedTrack(equipment(state.config));
-  const ordered=state.phase==="qualifying"?rankedQualifiers(state.cars):
-    state.phase==="grid"?[...state.cars].sort((a,b)=>
+  // Names and paint always come from the current livery (old saves included).
+  const careerNow=careerFrom(state.career);
+  const cars=state.cars.map(car=>dressed(car,careerNow));
+  const qualification=state.qualification?{...state.qualification,
+    results:(state.qualification.results||[]).map(r=>dressed(r,careerNow))}:null;
+  const ordered=state.phase==="qualifying"?rankedQualifiers(cars):
+    state.phase==="grid"?[...cars].sort((a,b)=>
       state.qualification.order.indexOf(a.id)-state.qualification.order.indexOf(b.id)):
-      [...state.cars].sort(raceOrder);
+      [...cars].sort(raceOrder);
   const ranking=ordered.map(c=>({id:c.id,name:c.name,color:c.color,progress:c.progress,
       hits:c.hits,finishedAt:c.finishedAt,lapsCompleted:c.lapsCompleted||0,
       distanceKm:c.distanceKm||0}));
   return {
-    cars:state.cars,round:state.round,phase:state.phase,
-    mode:state.mode||"quick",qualification:state.qualification||null,
-    rivals:state.cars.filter(c=>c.id!=="human").map(c=>({
+    version:VERSION,moveSeq:state.moveSeq||0,
+    // How many cars ahead of you already shot this round (they go first).
+    movedAhead:state.phase==="racing"&&state.turn?.round===state.round?state.turn.order.indexOf("human"):0,
+    cars,round:state.round,phase:state.phase,
+    mode:state.mode||"quick",qualification,
+    carColor:careerNow.carColor,carColors:CAR_COLORS,
+    rivals:cars.filter(c=>c.id!=="human").map(c=>({
       id:c.id,name:c.name,color:c.color,
       ...cpuProfile(c),tire:c.loadout?.tire||"medium",wing:c.loadout?.wing||"medium",
       hits:c.hits,avgPower:c.hits?+(100*(c.powerSum||0)/c.hits).toFixed(1):0,
@@ -740,7 +955,7 @@ export function viewFor(state,playerId){
     })),
     championship:state.championship?{
       ...state.championship,
-      table:seasonTable(state.championship,state.cars),
+      table:seasonTable(state.championship,cars),
       nextTrack:state.championship.tracks[state.championship.index+1]||null
     }:null,
     laps:LAPS,lapKm:track.lapKm,totalRaceKm:+(track.lapKm*LAPS).toFixed(2),
@@ -758,3 +973,5 @@ export function viewFor(state,playerId){
     maxPower:maxPower(state.cars[0])
   };
 }
+// Internal hooks for tools/ (golden, perf, equivalence tests). Not used by the game.
+export const __test={cpuShot,TRACKS,impulse,nearest,activeRoad};

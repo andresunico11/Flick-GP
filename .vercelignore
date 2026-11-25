@@ -1,0 +1,6 @@
+# Solo se publica el juego: index.html, *.js del juego, imágenes y favicon.
+tools/
+docs/
+CLAUDE.md
+README.txt
+package.json
