@@ -574,10 +574,22 @@ function updateResources(){
     $("mobile-hint").textContent="¡VUELTA COMPLETA! Reserva de energía: 100%";
   }
 }
+// The version lives only in logic.js (VERSION) and arrives through viewFor.
+let shownVersion="";
+function applyVersion(version){
+ if(!version||version===shownVersion)return;
+ shownVersion=version;
+ document.title="FLICK GP "+version+" — Cada impulso cuenta";
+ $("version-foot").textContent="FLICK GP · PROTOTIPO JUGABLE V"+version;
+ $("grid-brow").textContent="FLICK GP "+version+" · QUALIFYING COMPLETADO";
+}
 function setStatus(t,bad=false){UI.status.textContent="● "+t;UI.status.classList.toggle("error-text",bad)}
 function updateHud(){
  if(!view)return;
  const qualifying=view.phase==="qualifying",onGrid=view.phase==="grid";
+ // Nobody has shot yet: an all-zero tie is not a real order, so show "—".
+ const unranked=qualifying&&view.round===0;
+ applyVersion(view.version);
  if(!$("rivals-modal").hidden)renderRivals();
  const season=view.championship;
  const ongoing=!!season&&season.status!=="complete";
@@ -604,7 +616,7 @@ function updateHud(){
  const ranked=[...view.ranking];
  ranked.forEach((r,i)=>{
   const row=document.createElement("div");row.className="standing"+(r.id==="human"?" human":"");
-  const n=document.createElement("span");n.className="pos";n.textContent=String(i+1).padStart(2,"0");
+  const n=document.createElement("span");n.className="pos";n.textContent=unranked?"—":String(i+1).padStart(2,"0");
   const dot=document.createElement("span");dot.className="dot";dot.style.background=r.color;
   const name=document.createElement("span");name.className="name";name.textContent=r.name;
   const hits=document.createElement("small");
@@ -617,13 +629,13 @@ function updateHud(){
  mobileLeaders.replaceChildren();
  ranked.forEach((r,i)=>{
    const tile=document.createElement("div");tile.className="leader-tile"+(r.id==="human"?" human":"");
-   const number=document.createElement("span");number.className="leader-num";number.textContent=String(i+1);
+   const number=document.createElement("span");number.className="leader-num";number.textContent=unranked?"—":String(i+1);
    const dot=document.createElement("span");dot.className="leader-dot";dot.style.background=r.color;
    const name=document.createElement("span");name.className="leader-name";name.textContent=r.name==="VOS"?"VOS":r.name.slice(0,3);
    tile.append(number,dot,name);mobileLeaders.append(tile);
  });
  const place=ranked.findIndex(r=>r.id==="human")+1;
- $("mini-status").textContent=qualifying?"Q"+qRound+"/3 · "+place+".º":onGrid?"P"+place:
+ $("mini-status").textContent=qualifying?"Q"+qRound+"/3 · "+(unranked?"—":place+".º"):onGrid?"P"+place:
    place+"º / "+view.cars.length;
  $("race-stage-label").textContent=season?
    "🏆 "+season.name.toUpperCase()+" · GP "+(season.index+1)+"/3":
@@ -1016,7 +1028,8 @@ function renderGrid(){
     const info=document.createElement("span");info.className="grid-pilot-info";
     const name=document.createElement("strong");name.textContent=entry.id==="human"?"VOS":entry.name;
     const detail=document.createElement("small");
-    detail.textContent="Avance "+Math.max(0,entry.progress/view.courseLength*100).toFixed(1)+"% · "+entry.hits+" impulsos";
+    // Non-breaking spaces: on narrow cards the line only breaks after the "·".
+    detail.textContent="Avance\u00a0"+Math.max(0,entry.progress/view.courseLength*100).toFixed(1)+"%\u00a0· "+entry.hits+"\u00a0impulsos";
     info.append(name,detail);row.append(num,dot,info);results.append(row);
   }
   $("grid-modal").hidden=false;

@@ -3,7 +3,9 @@
  * One human and seven CPU drivers each take exactly one stroke per round.
  * All input is validated server-side. The physics is simulated at fixed steps.
  */
-export const meta = { game: "FLICK GP", minPlayers: 1, maxPlayers: 1 };
+// Single source of truth for the game version (UI, <title>, saves). Bump it here only.
+export const VERSION="0.7.5";
+export const meta = { game: "FLICK GP", version: VERSION, minPlayers: 1, maxPlayers: 1 };
 
 const TRACKS={
   valley:{
@@ -875,6 +877,7 @@ export function viewFor(state,playerId){
       hits:c.hits,finishedAt:c.finishedAt,lapsCompleted:c.lapsCompleted||0,
       distanceKm:c.distanceKm||0}));
   return {
+    version:VERSION,
     cars:state.cars,round:state.round,phase:state.phase,
     mode:state.mode||"quick",qualification:state.qualification||null,
     rivals:state.cars.filter(c=>c.id!=="human").map(c=>({
