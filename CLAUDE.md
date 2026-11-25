@@ -59,6 +59,14 @@ corré `node tools/nearest-test.mjs`.
 - Vista previa al compartir: las URLs de `og:url`, `og:image` y `twitter:image` en
   `index.html` tienen que ser absolutas al dominio de producción.
 
+## Publicación
+
+Vercel conectado al repo: `vercel.json` (sin install ni build, sale la raíz tal cual,
+`Cache-Control: must-revalidate` en HTML/JS para que el iPhone no quede con un
+`logic.js` viejo) y `.vercelignore` (no publica `tools/`, `docs/`, `package.json`).
+`main` = producción, cada rama = vista previa. Dominio usado en las etiquetas OG:
+`https://flick-gp.vercel.app`.
+
 ## Verificación visual
 
 Chromium + Playwright están disponibles en las sesiones en la nube. Para revisar la UI:

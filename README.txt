@@ -1,13 +1,19 @@
 FLICK GP 0.7.5 — BASE TÉCNICA
-JUEGO INDEPENDIENTE PARA VERCEL DROP
+JUEGO INDEPENDIENTE, SITIO ESTÁTICO PARA VERCEL
 
-PARA PUBLICAR
-1. Abrí https://vercel.com/drop
-2. Subí el ZIP, con index.html en la raíz.
-3. Publicá y abrí la dirección desde Safari en iPhone.
-4. En index.html reemplazá DOMINIO por tu dominio de Vercel
-   (og:url, og:image y twitter:image) para que la vista previa
-   al compartir muestre la imagen.
+PARA PUBLICAR (VERCEL + GITHUB)
+1. Entrá a https://vercel.com/new e importá el repositorio
+   andresunico11/Flick-GP. No cambies nada: vercel.json ya indica
+   que es un sitio estático sin build.
+2. Vercel publica main como producción y cada rama/PR como
+   vista previa (por ejemplo, la rama feat/0.7.5-base).
+3. Abrí la dirección desde Safari en iPhone.
+4. Las URLs de vista previa al compartir apuntan a
+   https://flick-gp.vercel.app. Si Vercel te asigna otro dominio,
+   cambialo en index.html (og:url, og:image y twitter:image).
+
+Alternativa sin GitHub: https://vercel.com/drop subiendo un ZIP
+con index.html en la raíz (sin las carpetas tools/ ni docs/).
 
 NOVEDADES 0.7.5
 - Rivales mucho más rápidos: en Experto cada ronda se calcula
