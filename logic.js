@@ -758,3 +758,5 @@ export function viewFor(state,playerId){
     maxPower:maxPower(state.cars[0])
   };
 }
+// Internal hooks for tools/ (golden, perf, equivalence tests). Not used by the game.
+export const __test={cpuShot,TRACKS,impulse,nearest,activeRoad};
