@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0e1418">
+  <title>FLICK GP 0.7.4 — Rivales y estrategia</title>
+  <meta name="description" content="FLICK GP: incliná tus impulsos con dos dedos, elegí tu potencia y competí en circuitos en miniatura. Un impulso por auto.">
+  <meta property="og:title" content="FLICK GP">
+  <meta property="og:image" content="./flick-gp-og.jpg">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta property="og:description" content="FLICK GP: clasificación de tres impulsos, ocho pilotos y carreras de dos vueltas. Cada impulso cuenta.">
+  <style>
+    :root{font-family:Inter,Manrope,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#ecf4f1;background:#0e1418}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;overscroll-behavior:none}
+    button{font:inherit;cursor:pointer}
+    button:focus-visible{outline:3px solid #f8be43;outline-offset:2px}
+    .app{width:min(1500px,100%);margin:auto;padding:19px 24px 22px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:17px}
+    .brand{display:flex;align-items:center;gap:14px}
+    .brand-logo{width:41px;height:41px;border-radius:12px;display:grid;place-items:center;background:#f0b43d;color:#151910;font-size:22px;font-weight:1000;font-style:italic;box-shadow:0 4px 25px #efb34129;transform:skewX(-8deg)}
+    .brand-text{display:flex;flex-direction:column;gap:1px}
+    h1{font-weight:1000;letter-spacing:-1.7px;line-height:1;margin:0;font-size:30px;font-style:italic}
+    h1 span{color:#ffc857}
+    .sub{font-size:10px;color:#9caeb2;text-transform:uppercase;letter-spacing:2.6px;font-weight:800;margin-top:6px}
+    .top-right{display:flex;align-items:center;gap:9px}
+    .tiny-badge{font-size:10px;letter-spacing:1.1px;border:1px solid #303e41;padding:8px 11px;border-radius:100px;color:#b6c5c5;font-weight:800}
+    .live-dot{width:7px;height:7px;border-radius:50%;background:#5fdb9b;display:inline-block;margin-right:6px;box-shadow:0 0 9px #59cf94}
+    .mute{background:#202b2f;color:#ced7da;border:1px solid #314147;width:36px;height:36px;border-radius:10px}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:16px;align-items:stretch}
+    .gamebox{min-width:0;border-radius:21px;overflow:hidden;border:1px solid #344247;background:#1f3632;box-shadow:0 20px 45px #0005;position:relative}
+    .arena-top{position:absolute;left:18px;right:18px;top:16px;display:flex;align-items:flex-start;justify-content:space-between;pointer-events:none;z-index:3}
+    .label-pill{display:inline-flex;flex-direction:column;padding:10px 15px;background:#10191fda;backdrop-filter:blur(10px);border:1px solid #ffffff27;border-radius:12px;gap:4px}
+    .label-pill strong{font-size:15px;line-height:1.1;letter-spacing:.1px}
+    .label-pill small{font-size:10px;letter-spacing:1.4px;color:#a5b8b9;text-transform:uppercase;font-weight:800}
+    #race{width:100%;height:clamp(470px,53vw,680px);display:block;touch-action:none;cursor:crosshair}
+    .arena-bottom{pointer-events:none;position:absolute;bottom:14px;left:15px;right:15px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+    .instruction{background:#10191fde;border:1px solid #ffffff25;padding:10px 15px;border-radius:12px;max-width:350px;font-size:13px;line-height:1.4;font-weight:750;backdrop-filter:blur(8px)}
+    .instruction b{color:#ffc857}
+    .power{background:#10191fdb;min-width:175px;border:1px solid #ffffff28;padding:11px 13px;border-radius:12px;backdrop-filter:blur(9px)}
+    .power-head{display:flex;justify-content:space-between;font-size:11px;font-weight:850;letter-spacing:1px}
+    .power-head strong{font-size:13px;color:#f7c766}
+    .power-track{height:9px;background:#354247;margin-top:8px;border-radius:50px;overflow:hidden}
+    .power-fill{width:0%;height:100%;background:linear-gradient(90deg,#52d79f,#f5cf61,#f26e4b);border-radius:50px;transition:width 45ms}
+    .side{display:flex;flex-direction:column;gap:13px;min-width:0}
+    .panel{border:1px solid #29383e;background:#171f25;border-radius:17px;padding:18px}
+    .panel-eyebrow{font-size:10px;letter-spacing:2px;color:#899ba0;text-transform:uppercase;font-weight:900}
+    .panel-title{font-size:20px;line-height:1.15;letter-spacing:-.6px;font-weight:900;margin:7px 0 16px}
+    #standings{display:flex;flex-direction:column;gap:7px}
+    .standing{display:grid;grid-template-columns:25px 14px minmax(0,1fr) auto;gap:8px;align-items:center;padding:11px 9px;background:#222e33;border:1px solid #324148;border-radius:9px;font-size:12px;font-weight:850}
+    .standing.human{background:#373423;border-color:#756235}
+    .standing .pos{color:#839aa2;font-weight:900}
+    .standing .dot{width:11px;height:11px;border-radius:3px;transform:rotate(45deg)}
+    .standing small{font-size:10px;color:#9eb0b4;font-weight:700}
+    .standing .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .panel-note{font-size:12px;color:#8fa4aa;line-height:1.6;margin:12px 0 0}
+    .tips{display:flex;flex-direction:column;gap:11px}
+    .tip{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:#bac9ca;line-height:1.45}
+    .tip-number{display:grid;place-items:center;background:#2b383d;border:1px solid #3d5257;color:#ffc857;font-size:11px;font-weight:900;width:24px;height:24px;flex:none;border-radius:7px}
+    .btn-main{display:block;width:100%;border:0;background:#f6bd4c;color:#172023;padding:13px 12px;border-radius:10px;font-weight:900;font-size:13px;letter-spacing:.4px;box-shadow:0 6px 19px #f6be4a21}
+    .btn-main:hover{filter:brightness(1.08)}
+    .foot{display:flex;justify-content:space-between;align-items:center;color:#72848c;font-size:11px;margin-top:15px;letter-spacing:.2px;gap:10px}
+    .kicker{display:flex;align-items:center;gap:5px;color:#ffc857;font-weight:800}
+    #overlay{display:none;position:absolute;inset:0;z-index:5;background:#0b1119ad;backdrop-filter:blur(7px);align-items:center;justify-content:center;padding:20px}
+    #overlay.show{display:flex}
+    .result-card{text-align:center;max-width:365px;width:100%;padding:28px 25px;border-radius:24px;background:linear-gradient(160deg,#27333b,#111a21);border:1px solid #6c755d;box-shadow:0 20px 70px #0008}
+    .result-icon{font-size:54px}
+    .result-card h2{font-style:italic;font-size:39px;letter-spacing:-2px;margin:6px 0 5px}
+    .result-card p{color:#aabbbe;line-height:1.55;margin:7px 0 18px}
+    .result-card .mini-stat{color:#f5c456;margin-bottom:15px;font-weight:900}
+    #connecting{display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:#12201fd4;color:#dae8e8;font-weight:800;z-index:4}
+    .error-text{color:#ffac9e!important}
+    @media (max-width:940px){
+      .app{padding:12px 12px 20px}
+      .layout{grid-template-columns:1fr}
+      .side{display:grid;grid-template-columns:1fr 1fr}
+      #race{height:600px}
+    }
+    @media (max-width:580px){
+      header{margin-bottom:13px}
+      .brand{gap:9px}
+      .brand-logo{width:36px;height:36px;font-size:19px}
+      h1{font-size:25px}
+      .sub{font-size:8px;letter-spacing:1.7px}
+      .tiny-badge{font-size:9px;padding:7px 9px}
+      #race{height:min(62dvh,580px);min-height:400px}
+      .gamebox{border-radius:15px}
+      .arena-top{top:9px;left:9px;right:9px}
+      .label-pill{padding:8px 10px;border-radius:9px}
+      .label-pill strong{font-size:12px}
+      .label-pill small{font-size:9px}
+      .arena-bottom{left:8px;right:8px;bottom:9px;gap:6px}
+      .instruction{font-size:11px;padding:8px 10px;max-width:54%;line-height:1.35}
+      .power{min-width:0;width:40%;padding:8px 9px;border-radius:10px}
+      .power-head{font-size:9px}
+      .power-head strong{font-size:11px}
+      .side{grid-template-columns:1fr;gap:11px}
+      .panel{padding:13px}
+      .panel-title{font-size:17px;margin:5px 0 9px}
+      #standings{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+      .standing{padding:9px 6px;gap:5px;grid-template-columns:17px 10px minmax(0,1fr) auto;font-size:11px}
+      .standing small{font-size:9px}
+      .tips{display:grid;grid-template-columns:1fr 1fr}
+      .tip{font-size:11px}
+      .foot{flex-wrap:wrap;line-height:1.5}
+    }
+    @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+    /* 0.2: true fixed-viewport mobile play surface, no document scrolling */
+    html,body{height:100%;width:100%;overflow:hidden;overscroll-behavior:none}
+    body{position:fixed;inset:0}
+    .app{height:var(--app-h,100dvh);max-height:100%;width:min(1500px,100%);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    header{flex:0 0 auto}
+    .layout{flex:1 1 auto;min-height:0;overflow:hidden}
+    .gamebox{height:100%;min-height:0}
+    #race{height:100%;min-height:0;width:100%;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+    .side{min-height:0;overflow-y:auto}
+    .foot{flex:0 0 auto}
+    .mobile-strip{display:none}
+    #quick-reset{display:none}
+    #car-setup-badge{position:absolute;z-index:3;top:90px;left:18px;background:#101c20dd;border:1px solid #ffffff28;color:#f3db9c;border-radius:8px;padding:6px 9px;font-size:10px;font-weight:900;letter-spacing:.6px;pointer-events:none}
+    .setup-modal[hidden]{display:none!important}
+    .setup-modal{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:12px;overflow:hidden;background:#050d13de;backdrop-filter:blur(8px)}
+    .settings-panel{width:min(440px,100%);max-height:calc(var(--app-h,100dvh) - 24px);overflow:auto;background:#18262d;border:1px solid #526367;border-radius:20px;padding:20px;box-shadow:0 18px 64px #000a;overscroll-behavior:contain}
+    .settings-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:13px}
+    .settings-head h2{font-size:23px;letter-spacing:-.9px;margin:4px 0 0}
+    .close-settings{border:1px solid #51636a;border-radius:9px;background:#28383e;color:white;width:36px;height:36px;flex:none}
+    .setting-grid{display:grid;gap:10px}
+    .setting-block{display:grid;gap:4px;padding:11px 12px;background:#26373f;border:1px solid #3a5058;border-radius:11px}
+    .setting-block strong{font-size:13px}
+    .setting-block span{font-size:11px;color:#b2c3c6}
+    .setting-block select{width:100%;min-width:0;border:1px solid #465b61;border-radius:8px;background:#121f26;color:#f0d59b;font-weight:800;padding:8px 9px;font-size:14px}
+    .settings-note{font-size:11px;line-height:1.4;color:#acbcbf;margin:12px 0}
+    @media(max-width:940px){
+      .app{padding:calc(env(safe-area-inset-top,0px) + 5px) 8px calc(env(safe-area-inset-bottom,0px) + 5px)}
+      header{height:43px;margin:0 0 6px;gap:7px}
+      .brand{gap:7px}
+      .brand-logo{height:32px;width:32px;font-size:17px;border-radius:8px}
+      h1{font-size:22px;letter-spacing:-1px}
+      .sub{font-size:7px;letter-spacing:1.3px;margin-top:3px}
+      .top-right{gap:5px}
+      .tiny-badge{padding:5px 7px;font-size:9px;letter-spacing:.2px}
+      .mute{height:33px;width:33px;font-size:17px;border-radius:8px}
+      #quick-reset{display:block}
+      .layout{display:flex;flex-direction:column;flex:1;gap:0;min-height:0}
+      .gamebox{height:auto;flex:1 1 auto;min-height:0;border-radius:13px}
+      #race{height:100%;min-height:0}
+      .side{display:none}
+      .foot{display:none}
+      .mobile-strip{display:block;flex:0 0 auto;height:68px;min-height:68px;margin-top:6px;border:1px solid #334148;background:#172329;border-radius:12px;padding:6px 8px}
+      .mobile-strip-head{display:flex;justify-content:space-between;color:#9fb2b6;font-size:9px;letter-spacing:1px;font-weight:900;margin-bottom:4px}
+      #mini-status{color:#f5c565}
+      .mobile-leaders{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+      .leader-tile{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:3px;background:#26343b;border:1px solid #364a51;border-radius:7px;padding:7px 6px;font-size:10px;font-weight:900}
+      .leader-tile.human{background:#3c3621;border-color:#a57b3c}
+      .leader-dot{width:7px;height:7px;border-radius:2px;flex:none;transform:rotate(45deg)}
+      .leader-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .leader-num{color:#f5ca7b}
+      .arena-top{top:7px;left:7px;right:7px}
+      .label-pill{padding:6px 9px}
+      .label-pill strong{font-size:11px}
+      .label-pill small{font-size:8px}
+      #car-setup-badge{top:59px;left:7px;font-size:8px;padding:5px 7px}
+      .arena-bottom{left:7px;right:7px;bottom:7px}
+      .instruction{font-size:10px;padding:6px 8px;max-width:58%;line-height:1.25}
+      .power{width:38%;min-width:0;padding:6px 8px}
+      .power-head{font-size:9px}
+      .power-head strong{font-size:11px}
+      .power-track{height:7px;margin-top:5px}
+      .result-card{padding:18px}
+      .result-card h2{font-size:29px}
+      .result-icon{font-size:35px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .app{padding-top:2px;padding-bottom:2px}
+      header{height:35px;margin-bottom:3px}
+      .mobile-strip{height:51px;min-height:51px;padding:4px 7px;margin-top:3px}
+      .mobile-strip-head{margin-bottom:2px}
+      .leader-tile{padding:4px}
+      .settings-panel{padding:12px}
+      .setting-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+      .setting-block{padding:7px}
+      .setting-block select{font-size:11px}
+      .settings-note{margin:7px 0;font-size:10px}
+    }
+    @media (max-width:360px){
+      .tiny-badge{display:none}
+      #car-setup-badge{max-width:68%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    }
+
+    /* V0.3: visible, actionable impulse wear and maximum power limit. */
+    .power-track{position:relative}
+    .power-ceiling{position:absolute;left:100%;top:-2px;bottom:-2px;width:2px;background:#fff2c7;box-shadow:0 0 6px #ffe9aa;transition:left .18s ease;pointer-events:none}
+    .power-max{display:flex;justify-content:space-between;margin-top:6px;color:#b3c4c4;font-size:9px;letter-spacing:.5px;font-weight:900}
+    .power-max strong{color:#ffdd8c;font-size:11px}
+    #wear-hud{position:absolute;z-index:3;top:124px;left:18px;min-width:209px;max-width:224px;padding:9px 11px;border:1px solid #ffffff2c;border-radius:11px;background:#101c20dd;backdrop-filter:blur(8px);pointer-events:none}
+    .wear-line{display:grid;grid-template-columns:75px 1fr 35px;align-items:center;gap:6px;margin-bottom:6px}
+    .wear-line span{font-size:9px;font-weight:900;letter-spacing:.6px;color:#e5ede6}
+    .wear-line b{font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+    .wear-track{height:7px;border-radius:999px;background:#344344;overflow:hidden}
+    .wear-fill{height:100%;width:100%;border-radius:999px;transition:width .28s ease,background-color .28s}
+    .energy-fill{background:#62dcb6}
+    .tire-fill{background:#f8c667}
+    .wear-alert{font-size:9px;font-weight:750;color:#b4c7c5;line-height:1.3}
+    @media (max-width:940px) {
+      #wear-hud{top:85px;left:7px;min-width:0;width:190px;max-width:53%;padding:7px 8px}
+      .wear-line{grid-template-columns:65px 1fr 28px;gap:4px;margin-bottom:4px}
+      .wear-line span{font-size:8px}
+      .wear-line b{font-size:10px}
+      .wear-track{height:6px}
+      .wear-alert{font-size:8px}
+      .power-max{font-size:8px;margin-top:3px}
+      .power-max strong{font-size:10px}
+    }
+    @media (max-width:940px) and (max-height:540px){
+      #wear-hud{top:77px;padding:5px 7px;width:185px}
+      .wear-alert{font-size:7px}
+    }
+    @media (max-width:370px){
+      #wear-hud{width:165px}
+      .wear-line{grid-template-columns:58px 1fr 25px}
+      .wear-line span{font-size:7px}
+    }
+
+    /* v0.4 precision preview: intentionally unobtrusive during dragging */
+    .trajectory-warning[hidden]{display:none!important}
+    .trajectory-warning{position:absolute;z-index:3;right:15px;bottom:97px;
+      display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+      min-width:171px;max-width:210px;padding:10px 12px;
+      border:1px solid #71db9b99;background:#102024ed;color:#e7f9ef;
+      border-radius:12px;box-shadow:0 6px 18px #07140d66;backdrop-filter:blur(10px);
+      pointer-events:none}
+    .trajectory-warning .trajectory-kicker{font-size:9px;letter-spacing:1.1px;font-weight:900;color:#a4c0bd}
+    .trajectory-warning .trajectory-signal{display:inline-block;width:7px;height:7px;border-radius:50%;background:#72e1a3;margin-right:5px}
+    .trajectory-warning strong{font-size:16px;letter-spacing:.4px;color:#70e29f}
+    .trajectory-warning span:not(.trajectory-signal){font-size:11px;color:#e0e9e1;font-weight:700}
+    .trajectory-warning small{font-size:9px;color:#a0b5b2}
+    .trajectory-warning[data-risk="medium"]{border-color:#f0cc6a99}
+    .trajectory-warning[data-risk="medium"] strong{color:#ffd16c}
+    .trajectory-warning[data-risk="medium"] .trajectory-signal{background:#ffd16c}
+    .trajectory-warning[data-risk="high"]{border-color:#ff76689c}
+    .trajectory-warning[data-risk="high"] strong{color:#ff9482}
+    .trajectory-warning[data-risk="high"] .trajectory-signal{background:#f57564}
+    @media(max-width:940px){
+      .trajectory-warning{right:7px;bottom:76px;min-width:142px;max-width:44%;padding:7px 9px;gap:2px}
+      .trajectory-warning .trajectory-kicker{font-size:8px;letter-spacing:.45px}
+      .trajectory-warning strong{font-size:13px}
+      .trajectory-warning span:not(.trajectory-signal){font-size:9px}
+      .trajectory-warning small{font-size:8px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .trajectory-warning{bottom:70px;min-width:133px;padding:5px 7px}
+      .trajectory-warning strong{font-size:11px}
+    }
+
+    /* v0.5 track selector and environmental status, without page scroll. */
+    .track-weather{display:inline-block!important;color:#b9e7d7!important;font-size:9px!important;letter-spacing:1.4px!important}
+    .track-weather[data-weather="wet"]{color:#9ed9f9!important}
+    .track-weather[data-weather="dry"]{color:#ffcf87!important}
+    .track-setting{border-color:#8f7444;background:linear-gradient(140deg,#34403e,#25363c)}
+    .track-description{color:#f5d69a!important;font-size:11px!important;line-height:1.45;font-weight:650}
+    #track-select{border-color:#b58b4e}
+    @media(max-width:940px){
+      .track-weather{font-size:7px!important;letter-spacing:.7px!important}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .setting-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .track-setting{grid-column:span 2}
+      .settings-panel{padding:10px}
+      .setting-block{gap:3px;padding:6px 8px}
+      .setting-block select{padding:6px}
+      .track-description{font-size:9px!important}
+    }
+
+    /* v0.6 garage progression: fixed scene, scroll only inside the modal */
+    #career-chip{position:absolute;right:8px;top:60px;z-index:3;padding:5px 10px;border-radius:8px;
+      background:#172b2bdf;border:1px solid #e6b45480;color:#f9d47d;font-size:12px;font-weight:900;
+      font-variant-numeric:tabular-nums;box-shadow:0 3px 12px #09171577;pointer-events:none}
+    .garage-launch{font-size:16px}
+    .garage-panel{width:min(650px,100%);padding:18px 20px;max-height:calc(var(--app-h,100dvh) - 20px);
+      border-color:#b29660;box-shadow:0 20px 80px #070d10e8;overflow-y:auto}
+    .career-summary{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin:10px 0}
+    .career-summary>div{display:flex;flex-direction:column;gap:3px;background:#283b3c;
+      border:1px solid #546462;border-radius:10px;padding:10px 12px}
+    .career-summary small{color:#a4b8ba;font-size:9px;font-weight:900;letter-spacing:.8px}
+    .career-summary strong{font-size:21px;line-height:1.2;color:#f4c65e;font-variant-numeric:tabular-nums}
+    .career-intro{font-size:11px;color:#b6cacc;line-height:1.4;margin:9px 0 12px}
+    .upgrade-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+    .upgrade-card{display:flex;flex-direction:column;gap:7px;padding:12px;background:#233139;
+      border:1px solid #40555b;border-radius:12px;min-width:0}
+    .upgrade-card.locked{background:#1c292f;border-color:#34464c;opacity:.79}
+    .upgrade-card-head{display:flex;align-items:center;gap:7px}
+    .upgrade-icon{display:grid;place-items:center;width:31px;height:31px;background:#384950;border-radius:9px;font-size:17px;flex:none}
+    .upgrade-card h3{margin:0;font-size:13px;font-weight:900;letter-spacing:-.2px}
+    .upgrade-card p{font-size:10px;color:#bdd0d2;line-height:1.35;margin:0;min-height:28px}
+    .upgrade-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+    .upgrade-levels span{height:6px;border-radius:8px;background:#4a5d61}
+    .upgrade-levels span.on{background:#f4c768}
+    .upgrade-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}
+    .upgrade-foot small{font-size:10px;color:#b0bdc0;white-space:nowrap}
+    .upgrade-foot button{padding:8px 10px;background:#f3c45d;border:0;border-radius:8px;
+      color:#192323;font-size:10px;font-weight:900;min-width:94px}
+    .upgrade-foot button:disabled{background:#48595e;color:#b3bbbd;cursor:not-allowed}
+    .garage-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+    .garage-footer small{font-size:10px;color:#becdcb;line-height:1.4;max-width:58%}
+    .garage-footer .btn-main{width:auto;min-width:185px}
+    .earned-credits{display:block;font-weight:1000;color:#ffce69;margin:-3px 0 14px;
+      font-size:19px;letter-spacing:.6px}
+    .btn-secondary{display:block;width:100%;border:1px solid #59696c;color:#e2f2ef;
+      background:#2a3c42;padding:11px;border-radius:10px;font-weight:900;font-size:12px;margin-top:8px}
+    @media(max-width:940px){
+      #career-chip{top:60px;right:7px;font-size:10px;padding:4px 8px}
+      .garage-panel{padding:12px}
+      .career-summary{gap:5px;margin:8px 0}
+      .career-summary>div{padding:8px}
+      .career-summary small{font-size:8px;letter-spacing:.1px}
+      .career-summary strong{font-size:18px}
+      .upgrade-card{padding:9px;gap:5px}
+      .upgrade-card h3{font-size:11px}
+      .upgrade-card p{font-size:9px}
+      .upgrade-foot button{font-size:9px;min-width:73px;padding:7px 5px}
+      .garage-footer .btn-main{min-width:134px}
+      .garage-footer small{font-size:9px}
+    }
+    @media(max-width:500px){
+      .garage-panel{max-height:calc(var(--app-h,100dvh) - 16px)}
+      .upgrade-grid{gap:6px}
+      .upgrade-card-head{gap:5px}
+      .upgrade-icon{width:26px;height:26px;font-size:14px}
+      .upgrade-card p{min-height:37px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .garage-panel{max-height:calc(var(--app-h,100dvh) - 8px);padding:9px 12px}
+      .garage-panel .settings-head{margin-bottom:3px}
+      .career-summary strong{font-size:15px}
+      .career-summary>div{padding:6px 9px}
+      .career-intro{margin:4px 0 8px}
+      .upgrade-card{padding:8px}
+      .upgrade-card p{min-height:0}
+      .upgrade-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .upgrade-foot button{padding:5px}
+      .garage-footer{margin-top:8px}
+    }
+
+    /* 0.6.1 two-finger magnetic curve feedback */
+    .curve-head{display:flex;justify-content:space-between;gap:5px;align-items:center;margin-top:10px;
+      font-size:9px;font-weight:900;letter-spacing:.65px;color:#a6c7c8}
+    .curve-head strong{color:#f5ce8f;font-size:11px;white-space:nowrap;letter-spacing:0}
+    .curve-head strong[data-bend="left"]{color:#88ccff}
+    .curve-head strong[data-bend="right"]{color:#ffc579}
+    .curve-track{position:relative;height:7px;margin-top:6px;border-radius:8px;
+      background:linear-gradient(90deg,#244e65,#2c383e 49%,#2c383e 51%,#725334);overflow:hidden}
+    .curve-left,.curve-right{position:absolute;top:0;height:100%;width:0;transition:width .055s linear}
+    .curve-left{right:50%;background:#81cfff;border-radius:8px 0 0 8px}
+    .curve-right{left:50%;background:#f9c76d;border-radius:0 8px 8px 0}
+    .curve-center{position:absolute;top:0;bottom:0;left:calc(50% - 1px);width:2px;background:#ffffffd2}
+    .power{min-width:187px}
+    @media(max-width:940px){
+      .curve-head{font-size:7px;margin-top:6px;letter-spacing:.05px}
+      .curve-head strong{font-size:9px}
+      .curve-track{height:6px;margin-top:3px}
+      .power{min-width:0}
+      .instruction{max-width:56%}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .curve-head{margin-top:3px}
+      .curve-track{height:4px;margin-top:2px}
+      .power{padding:4px 7px}
+    }
+
+    /* v0.6.2: independent mobile cockpit, never layered over the circuit. */
+    .mobile-racehead,.mobile-dashboard{display:none}
+    @media(max-width:940px){
+      .mobile-racehead{display:flex;flex:0 0 auto;min-height:35px;align-items:center;gap:6px;
+        padding:5px 8px;margin-bottom:5px;border-radius:10px;border:1px solid #32444c;background:#19252b;
+        white-space:nowrap;overflow:hidden}
+      .mobile-track-meta{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}
+      .mobile-track-meta strong{font-size:11px;line-height:1.05;overflow:hidden;text-overflow:ellipsis}
+      .mobile-track-meta span{font-size:8px;color:#99cbce;font-weight:900;letter-spacing:.4px}
+      .head-round,.head-credits{font-size:10px;font-weight:900;color:#f7d48a;flex:none}
+      .camera-buttons{display:flex;gap:3px;align-items:center;flex:none}
+      .camera-buttons button{width:25px;height:25px;padding:0;border:1px solid #41565f;border-radius:7px;
+        background:#2c4049;color:#f3eee1;font-weight:900;font-size:16px;touch-action:manipulation}
+      .camera-buttons button[aria-pressed="true"]{background:#8f7642;border-color:#e5be64;color:#fff}
+      #zoom-level{min-width:29px;text-align:center;font-size:9px;font-weight:850;color:#b6cecb}
+      .arena-top,.arena-bottom,#career-chip,#car-setup-badge,#wear-hud,.trajectory-warning{display:none!important}
+      .mobile-dashboard{display:flex;flex-direction:column;gap:4px;flex:0 0 auto;margin-top:5px;
+        padding:7px 8px;background:#18262d;border:1px solid #334b51;border-radius:10px;min-height:61px}
+      .mobile-gauges{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+      .compact-resource{min-width:0}
+      .compact-resource>span{display:flex;align-items:baseline;justify-content:space-between;gap:2px;
+        font-size:8px;font-weight:900;white-space:nowrap;color:#acbfc0;letter-spacing:0}
+      .compact-resource b{font-size:10px;color:#f7e0a7}
+      .compact-resource small{display:none}
+      .compact-bar{height:5px;background:#36484b;margin-top:5px;border-radius:8px;overflow:hidden}
+      .compact-bar i{display:block;height:100%;width:100%;background:#62d8b7;border-radius:8px;transition:width .16s}
+      #mini-tires-fill{background:#eac369}
+      #mini-power-fill{width:0;background:#e7bb63}
+      .mobile-curve .bi-bar{position:relative;background:linear-gradient(90deg,#294f6b,#415054 50%,#70523d)}
+      #mini-curve-fill{background:#74cfff;position:absolute;left:50%;width:0;transition:width .12s}
+      .mobile-hint{font-size:8px;color:#b8cbd0;line-height:1.1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .mobile-risk[hidden]{display:none}
+      .mobile-risk{font-size:9px;font-weight:900;color:#9bf3b9;text-align:center}
+      .mobile-risk[data-risk="medium"]{color:#ffd276}
+      .mobile-risk[data-risk="high"]{color:#ff9892}
+      .mobile-strip{height:55px;min-height:55px;margin-top:5px}
+      .mobile-strip-head{margin-bottom:2px}
+      .leader-tile{padding:5px 4px}
+      .gamebox{border-radius:11px}
+      #race{cursor:grab}
+    }
+    @media(max-width:390px){
+      .mobile-racehead{gap:4px;padding:4px 5px}
+      .mobile-track-meta strong{font-size:10px}
+      .camera-buttons button{width:23px;height:24px}
+      .mobile-gauges{gap:4px}
+      .compact-resource>span{font-size:7px}
+      .compact-resource b{font-size:9px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .mobile-racehead{min-height:28px;padding:2px 6px;margin-bottom:3px}
+      .camera-buttons button{height:23px;width:23px}
+      .mobile-dashboard{padding:4px 7px;min-height:45px;gap:2px;margin-top:3px}
+      .compact-bar{margin-top:2px}
+      .mobile-hint{font-size:7px}
+      .mobile-strip{height:43px;min-height:43px;margin-top:3px;padding:3px 6px}
+      .leader-tile{padding:3px 4px}
+    }
+
+    /* 0.7.0 — compact 8-car field and live lap/odometer cockpit. */
+    .mobile-trip{display:flex;align-items:center;justify-content:space-between;gap:6px;
+      font-size:9px;font-weight:800;color:#a9c7c7}
+    .mobile-trip span{min-width:0;white-space:nowrap}
+    .mobile-trip b{color:#f9d18c;font-size:9px}
+    .result-distance{font-size:12px;color:#d0e5df;font-weight:900;margin:1px 0 10px}
+    @media(max-width:940px){
+      .mobile-strip{height:87px;min-height:87px}
+      .mobile-leaders{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+      .mobile-dashboard{min-height:77px}
+      .mobile-trip{font-size:8px}
+      .mobile-trip b{font-size:9px}
+      .leader-tile{padding:6px 4px}
+      .head-round{font-size:9px}
+    }
+    @media(max-width:390px){
+      .mobile-strip{height:83px;min-height:83px}
+      .mobile-trip{font-size:7px}
+      .mobile-trip b{font-size:8px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .mobile-strip{height:70px;min-height:70px}
+      .mobile-dashboard{min-height:55px}
+      .leader-tile{padding:3px 4px}
+      .mobile-trip{font-size:7px}
+      .mobile-trip b{font-size:8px}
+    }
+
+    .result-lap-splits{display:grid;gap:5px;margin:7px 0 13px}
+    .result-lap-splits>div{display:flex;justify-content:space-between;gap:6px;background:#293c42;padding:6px 8px;border-radius:6px;font-size:10px;color:#d3e7df;font-weight:800}
+    .result-lap-splits strong{color:#ffcf7c;white-space:nowrap}
+    .career-odometer{font-size:11px;font-weight:800;color:#f6d899;margin:7px 0}
+
+    /* 0.7.1 qualifying / starting grid */
+    .qualify-trigger{border:1px solid #aa8f4f;border-radius:8px;background:#514327;
+      color:#ffe09a;font-size:10px;font-weight:950;padding:7px 9px;letter-spacing:.15px}
+    .qualify-trigger[hidden]{display:none!important}
+    #qualify-trigger-desktop{margin-bottom:8px;width:100%;background:#655027}
+    .grid-panel{width:min(520px,100%);max-height:calc(var(--app-h,100dvh) - 20px);overflow-y:auto}
+    .grid-brow{font-size:10px;color:#f8cb67;letter-spacing:1.3px;font-weight:950}
+    .grid-subhead{font-size:11px;color:#b4c8ca;margin:4px 0 0}
+    .grid-pole-icon{font-size:33px}
+    .grid-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+    .grid-pilot{display:flex;gap:7px;align-items:center;padding:11px 9px;border:1px solid #45606a;
+      border-radius:10px;background:#24373c;min-width:0}
+    .grid-pilot.human{background:#403821;border-color:#e9bd55}
+    .grid-pilot-num{font-size:20px;font-weight:1000;color:#f9d07b;min-width:26px}
+    .grid-pilot-mark{width:12px;height:12px;flex:none;border-radius:3px;transform:rotate(45deg)}
+    .grid-pilot-info{display:flex;flex-direction:column;min-width:0;gap:3px}
+    .grid-pilot-info strong{font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .grid-pilot-info small{font-size:9px;color:#b5cbca;white-space:nowrap}
+    .grid-explainer{font-size:11px;color:#bbd3ca;line-height:1.5}
+    .race-mode-setting{border-color:#806c42}
+    @media(max-width:940px){
+      .qualify-trigger{padding:5px 8px;font-size:9px}
+      .mobile-dashboard:has(.qualify-trigger:not([hidden])){min-height:95px}
+      .grid-panel{padding:14px;max-height:calc(var(--app-h,100dvh) - 16px)}
+      .grid-pilot{padding:7px}
+      .grid-pilot-num{font-size:17px;min-width:20px}
+      .grid-results{gap:6px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .setting-grid .race-mode-setting{grid-column:span 2}
+      .mobile-dashboard:has(.qualify-trigger:not([hidden])){min-height:69px}
+      .grid-results{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+      .grid-pilot{padding:5px 4px;gap:3px}
+      .grid-pilot-num{font-size:13px;min-width:13px}
+      .grid-pilot-mark{width:8px;height:8px}
+      .grid-pilot-info strong{font-size:9px}
+      .grid-pilot-info small{font-size:8px}
+      .grid-explainer{margin:5px 0}
+    }
+
+    /* 0.7.2 six interactive circuit cards: playable, no paywall yet. */
+    .circuit-catalog{border:1px solid #42585d;background:#182a31;border-radius:11px;padding:10px}
+    .circuit-catalog-head{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:9px}
+    .circuit-catalog-head strong{color:#f6ce7d;font-size:10px;letter-spacing:.5px}
+    .circuit-catalog-head small{color:#91d6b9;font-size:9px;font-weight:750}
+    .circuit-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+    .circuit-card{display:flex;min-width:0;flex-direction:column;align-items:stretch;gap:3px;
+      padding:5px;border:1px solid #47616b;border-radius:9px;background:#25353e;
+      color:#eaf6ef;text-align:left;transition:border-color .14s,background .14s}
+    .circuit-card canvas{display:block;max-width:100%;width:100%;height:53px;border-radius:6px;background:#344a50}
+    .circuit-card strong{font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .circuit-card small{font-size:8px;color:#b9c9cb;letter-spacing:.25px;font-weight:850}
+    .circuit-card[aria-pressed="true"]{background:#4a4127;border-color:#f1c364;box-shadow:inset 0 0 0 1px #eac16d}
+    .circuit-card[aria-pressed="true"] small{color:#ffe5b3}
+    @media(max-width:940px){
+      .setting-grid .circuit-catalog{grid-column:1/-1}
+      .circuit-card canvas{height:38px}
+      .circuit-card{padding:4px}
+      .circuit-card strong{font-size:9px}
+      .circuit-catalog{padding:7px}
+      .circuit-catalog-head strong{font-size:9px}
+    }
+    @media(max-width:390px){
+      .circuit-cards{gap:4px}
+      .circuit-card strong{font-size:8px}
+      .circuit-card small{font-size:7px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .circuit-card canvas{height:28px}
+      .circuit-catalog-head{margin-bottom:4px}
+      .circuit-catalog{padding:4px}
+    }
+
+    /* v0.7.3 Championship: standings and schedule live OUTSIDE the race canvas. */
+    #play-again[hidden],#start-championship[hidden],#advance-championship[hidden],
+    #championship-garage[hidden],#abandon-championship[hidden],
+    #cup-options[hidden],#mobile-champ-tag[hidden]{display:none!important}
+    .championship-panel{width:min(520px,100%);max-height:calc(var(--app-h,100dvh) - 22px);overflow-y:auto}
+    .championship-intro{font-size:11px;line-height:1.45;color:#acc8c9;margin:6px 0 10px}
+    .cup-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:6px 0 12px}
+    .cup-choice{background:#243941;border:1px solid #47616b;color:#f0f2e8;border-radius:9px;
+      padding:10px 8px;text-align:left;min-width:0;display:flex;flex-direction:column;gap:5px}
+    .cup-choice strong{font-size:11px}
+    .cup-choice small{font-size:9px;line-height:1.3;color:#b2c6c6}
+    .cup-choice[aria-pressed="true"]{background:#524127;border-color:#e4c26f}
+    .champ-schedule{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:12px}
+    .champ-step{background:#23363b;padding:9px 6px;border:1px solid #445962;border-radius:8px;min-width:0}
+    .champ-step .gp-round{font-size:9px;letter-spacing:.3px;color:#a7c7c6;font-weight:900}
+    .champ-step strong{display:block;font-size:10px;margin:4px 0;color:#ebf0e4;line-height:1.2}
+    .champ-step small{font-size:9px;color:#c4d1d1}
+    .champ-step.active{border-color:#e4c374;background:#483d27}
+    .champ-step.done{border-color:#4e9d80}
+    .championship-table-head{display:flex;justify-content:space-between;gap:7px;align-items:center;margin:10px 0 6px}
+    .championship-table-head strong{font-size:10px;color:#efc976;letter-spacing:.45px}
+    .championship-table-head small{font-size:9px;color:#9fb6b7}
+    .championship-table{display:grid;gap:3px}
+    .champ-row{display:grid;grid-template-columns:28px 10px minmax(0,1fr) 45px 64px;align-items:center;
+      gap:6px;background:#26373d;border-radius:6px;padding:6px 8px;font-size:11px;color:#edf3e9}
+    .champ-row.human{background:#4a3c22;border:1px solid #e5ba5d}
+    .champ-row .champ-position{font-weight:950;color:#e9d39d}
+    .champ-row .champ-dot{width:9px;height:9px;border-radius:2px;transform:rotate(45deg)}
+    .champ-row .champ-driver{font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .champ-row .champ-history{font-size:9px;color:#b1c4c4;text-align:right}
+    .champ-row .champ-points{font-size:13px;font-weight:950;text-align:right;color:#ffda90}
+    .championship-honors{padding:12px;margin:9px 0;border-radius:9px;background:#4b3d24;
+      border:1px solid #e3c376;color:#ffe8ae;font-size:12px;font-weight:800;line-height:1.45}
+    .championship-archive{font-size:10px;color:#aabfbf;text-align:center;margin:9px 0}
+    .champ-abandon{color:#dfa6a0;border-color:#795350}
+    #championship-modal .btn-main,#championship-modal .btn-secondary{width:100%;margin-top:7px}
+    .result-season{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;background:#4d3d21;
+      color:#ffdb92;border:1px solid #ad8950;border-radius:8px;font-size:11px;margin:6px 0}
+    .result-season[hidden]{display:none}
+    .result-season span{color:#e5e2c9}
+    #next-gp[hidden]{display:none}
+    .championship-launch{font-size:21px}
+    .mobile-track-meta #mobile-champ-tag{color:#e3be74;font-size:7px;letter-spacing:.2px}
+    @media(max-width:940px){
+      .championship-panel{padding:12px;max-height:calc(var(--app-h,100dvh) - 12px)}
+      .cup-choice{padding:7px 6px}
+      .cup-choice strong{font-size:10px}
+      .cup-choice small{font-size:8px}
+      .champ-step{padding:7px 5px}
+      .champ-step strong{font-size:9px}
+      .champ-row{padding:5px 7px}
+      #championship-desktop{display:none}
+      .championship-launch{font-size:17px}
+    }
+    @media(max-width:390px){
+      .champ-row{grid-template-columns:23px 9px minmax(0,1fr) 38px 52px;gap:4px;font-size:10px}
+      .champ-row .champ-points{font-size:12px}
+      .championship-table-head small{font-size:8px}
+      .cup-choice strong{font-size:9px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .cup-options{margin-bottom:6px}
+      .champ-schedule{margin-bottom:6px}
+      .champ-row{padding:3px 6px}
+    }
+
+    /* 0.7.4: rival scouting and race telemetry off the track. */
+    .rivals-panel{width:min(560px,100%);max-height:calc(var(--app-h,100dvh) - 22px);overflow-y:auto}
+    .rival-intro,.rivals-note{font-size:11px;color:#b7c8c8;line-height:1.45;margin:8px 0}
+    .rival-setup-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:10px 0}
+    .rival-profile{background:#20363d;border:1px solid #425961;border-radius:8px;padding:9px 8px;min-width:0}
+    .rival-title{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+    .rival-title-dot{width:9px;height:9px;border-radius:2px;transform:rotate(45deg);flex:none}
+    .rival-title strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rival-style{color:#f6ce7e;font-size:9px;font-weight:900;margin:3px 0;letter-spacing:.2px}
+    .rival-detail{font-size:9px;line-height:1.35;color:#a8c2c2}
+    .rival-setup{font-size:9px;color:#d2e4db;margin-top:6px;font-weight:800}
+    .rival-stats-heading{font-size:11px;color:#f0c779;font-weight:900;margin:12px 0 6px}
+    .rival-telemetry-head,.rival-telemetry-row{display:grid;
+      grid-template-columns:minmax(0,1.5fr) .55fr .62fr .65fr .67fr;align-items:center;gap:4px}
+    .rival-telemetry-head{font-size:8px;color:#97acad;padding:5px 7px}
+    .rival-telemetry-row{font-size:10px;border-radius:6px;background:#253a40;padding:8px 7px;
+      margin-bottom:3px;color:#d4e9df;font-weight:750}
+    .rival-telemetry-row.human{background:#554628;border:1px solid #e5c16a}
+    .rival-telemetry-row span:not(:first-child){text-align:right}
+    .rival-telemetry-row span:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .rival-scout-button{grid-column:1/-1;width:100%;font-size:10px;font-weight:900;letter-spacing:.3px}
+    .result-scout{font-size:10px;width:100%;margin:4px 0 8px;padding:8px}
+    @media(max-width:940px){
+      #rival-desktop{display:none}
+      .rivals-panel{padding:12px;max-height:calc(var(--app-h,100dvh) - 12px)}
+      .rival-profile{padding:7px 6px}
+      .rival-title strong{font-size:9px}
+      .rival-detail{font-size:8px}
+      .rival-setup{font-size:8px}
+    }
+    @media(max-width:380px){
+      .rival-telemetry-row{font-size:9px;gap:2px;padding:6px 4px}
+      .rival-telemetry-head{font-size:7px}
+      .rival-setup-list{gap:4px}
+    }
+    @media(max-width:940px) and (max-height:540px){
+      .rival-setup-list{grid-template-columns:repeat(3,minmax(0,1fr));}
+      .rival-profile{padding:5px}
+      .rival-telemetry-row{padding:4px}
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand"><div class="brand-logo" aria-hidden="true">F</div><div class="brand-text"><h1>FLICK <span>GP</span></h1><div class="sub">EVERY SHOT COUNTS</div></div></div>
+      <div class="top-right"><span class="tiny-badge"><span class="live-dot"></span><span id="connection-label">CONECTANDO</span></span><button id="championship-launch" class="mute championship-launch" aria-label="Abrir modo campeonato" title="Modo Campeonato">🏆</button><button id="garage" class="mute garage-launch" aria-label="Abrir garaje" title="Garaje de mejoras">🔧</button><button id="settings" class="mute" aria-label="Configurar carrera" title="Configuración">⚙</button>
+      <button id="quick-reset" class="mute" aria-label="Reiniciar carrera" title="Reiniciar">↻</button>
+      <button id="mute" class="mute" aria-label="Silenciar sonidos" title="Sonidos">♪</button></div>
+    </header>
+    <section class="mobile-racehead" aria-label="Datos de la carrera">
+      <div class="mobile-track-meta">
+        <strong id="mobile-track-name">Valle Verde</strong><span id="mobile-weather">SOLEADO</span>
+        <span id="mobile-champ-tag" hidden>🏆 GP 1/3</span>
+      </div>
+      <span class="head-round"><b id="mobile-lap">V1/2</b> · <b id="mobile-round">R01</b></span>
+      <span class="head-credits">🪙 <b id="mobile-credits">160</b></span>
+      <div class="camera-buttons" aria-label="Controles de cámara">
+        <button id="zoom-out" type="button" aria-label="Alejar la cámara">−</button>
+        <span id="zoom-level" aria-live="polite">100%</span>
+        <button id="zoom-in" type="button" aria-label="Acercar la cámara">+</button>
+        <button id="map-toggle" type="button" aria-pressed="false" aria-label="Mostrar u ocultar el minimapa" title="Minimapa">▤</button>
+        <button id="focus-car" type="button" aria-label="Centrar cámara en el auto amarillo" title="Centrar en mi auto">⌖</button>
+      </div>
+    </section>
+    <div class="layout">
+      <section class="gamebox" aria-label="Circuito de carreras">
+        <div class="arena-top">
+          <div class="label-pill"><small id="track-number">CIRCUITO 01</small><strong id="track-name">Valle Verde</strong><small class="track-weather" id="track-weather" data-weather="sunny">SOLEADO</small></div>
+          <div class="label-pill" style="text-align:right"><small id="desktop-lap">VUELTA 1/2</small><strong id="round">RONDA 01</strong></div>
+        </div>
+        <canvas id="race" tabindex="0" aria-label="Pista interactiva. Para lanzar tocá el auto amarillo y arrastrá. Desde el fondo mové la cámara o usá dos dedos para zoom. Con el primer dedo sobre el auto, el segundo regula el efecto."></canvas>
+        <div class="arena-bottom">
+          <div class="instruction" id="instruction"><b>1 DEDO:</b> dirección y potencia. <b>2 DEDOS:</b> curvatura.</div>
+          <div class="power">
+            <div class="power-head"><span>POTENCIA</span><strong id="power-value">0%</strong></div>
+            <div class="power-track"><div class="power-fill" id="power-fill"></div><div class="power-ceiling" id="power-ceiling"></div></div>
+            <div class="power-max">LÍMITE ACTUAL <strong id="power-limit">100%</strong></div>
+            <div class="curve-head"><span>EFECTO / CURVATURA</span><strong id="curve-value">RECTO</strong></div>
+            <div class="curve-track" aria-label="Indicador de efecto izquierdo o derecho">
+              <div class="curve-left" id="curve-left"></div>
+              <div class="curve-right" id="curve-right"></div>
+              <div class="curve-center"></div>
+            </div>
+          </div>
+        </div>
+        <div id="career-chip" aria-live="polite" title="Créditos de carrera">🪙 <span id="career-credits">160</span></div>
+        <div id="car-setup-badge" aria-live="polite">PRO · MEDIOS · ALA MEDIA</div>
+        <div id="wear-hud" aria-label="Reserva de impulso y estado de neumáticos">
+          <div class="wear-line"><span>RESERVA</span><div class="wear-track"><div class="wear-fill energy-fill" id="energy-fill"></div></div><b id="energy-value">100%</b></div>
+          <div class="wear-line"><span>NEUMÁTICOS</span><div class="wear-track"><div class="wear-fill tire-fill" id="tire-fill"></div></div><b id="tire-value">100%</b></div>
+          <div class="wear-alert" id="wear-alert" aria-live="polite">La potencia alta consume reserva</div>
+        </div>
+        <div id="trajectory-warning" class="trajectory-warning" role="status" aria-live="polite" hidden>
+          <div class="trajectory-kicker"><span class="trajectory-signal"></span> GUÍA DE TRAYECTORIA</div>
+          <strong id="trajectory-risk">RIESGO BAJO</strong>
+          <span id="trajectory-desc">Trayectoria controlada</span>
+          <small>Con efecto, la línea también se curva</small>
+        </div>
+        <div id="connecting">CONECTANDO A LA PISTA…</div>
+        <div id="overlay">
+          <div class="result-card">
+            <div class="result-icon" id="result-icon">🏆</div>
+            <h2 id="result-title">¡VICTORIA!</h2>
+            <div id="result-stat" class="mini-stat">2 VUELTAS · 8 PILOTOS</div>
+            <div class="result-distance" id="result-distance">0,00 km · 0 impulsos</div>
+            <div class="result-lap-splits" id="result-lap-splits" aria-label="Resumen por vuelta"></div>
+            <p id="result-description">Terminaste en primera posición.</p>
+            <div class="earned-credits" id="earned-credits">+0 CRÉDITOS</div>
+            <button class="btn-secondary result-scout" id="result-rivals" type="button">📊 VER DATOS DE LOS 8 PILOTOS</button>
+            <div id="result-season" class="result-season" hidden>
+              <strong id="result-season-points">🏆 +0 PUNTOS</strong>
+              <span id="result-season-place">1.º del campeonato</span>
+            </div>
+            <button class="btn-main" id="next-gp" type="button" hidden>🏁 SIGUIENTE GRAN PREMIO</button>
+            <button class="btn-main" id="result-garage" type="button">🔧 IR AL GARAJE</button>
+            <button class="btn-secondary" id="play-again">CORRER DE NUEVO ↗</button>
+          </div>
+        </div>
+      </section>
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-eyebrow">CLASIFICACIÓN EN VIVO</div>
+          <div class="panel-title">Posiciones <span style="color:#f8be43">↗</span></div>
+          <div id="standings"><div class="standing">Preparando la parrilla…</div></div>
+          <p class="panel-note" id="ranking-note">8 pilotos · 2 vueltas · 1 impulso por ronda.</p>
+        </section>
+        <section class="panel">
+          <div class="panel-eyebrow">CÓMO JUGAR</div>
+          <div class="panel-title">La precisión gana.</div>
+          <div class="tips">
+            <div class="tip"><span class="tip-number">01</span><span>Con el primer dedo arrastrá hacia atrás: fijás dirección y potencia.</span></div>
+            <div class="tip"><span class="tip-number">02</span><span>Sin soltarlo, deslizá el segundo dedo hacia izquierda o derecha para curvar.</span></div>
+            <div class="tip"><span class="tip-number">03</span><span>Soltá el primer dedo para lanzar. El efecto tiene un costo extra de energía y neumáticos.</span></div>
+            <div class="tip"><span class="tip-number">04</span><span>La guía muestra la curva aproximada: usala para evitar rivales y guardarraíles.</span></div>
+          </div>
+          <p class="panel-note">Dos vueltas por carrera. La energía se recarga al cruzar la meta de cada vuelta; los neumáticos siguen gastándose. La guía es aproximada: muestra solo parte de la trayectoria, no el punto final. En PC apuntá con ← →, potencia con ↑ ↓, curvatura con Q / E, recto con X y lanzá con espacio.</p>
+        </section>
+        <button id="qualify-trigger-desktop" class="btn-main qualify-trigger" type="button">🏁 INICIAR QUALIFYING · 3 IMPULSOS</button>
+        <button id="rival-desktop" class="btn-main" type="button">📊 RIVALES Y ESTRATEGIA</button>
+        <button id="championship-desktop" class="btn-main" type="button">🏆 MODO CAMPEONATO</button>
+        <button id="reset" class="btn-main">↻ NUEVA CARRERA</button>
+      </aside>
+    </div>
+    <section class="mobile-dashboard" aria-label="Instrumentos de conducción">
+      <div class="mobile-gauges">
+        <div class="compact-resource"><span>RESERVA <b id="mini-energy">100%</b></span><div class="compact-bar"><i id="mini-energy-fill"></i></div></div>
+        <div class="compact-resource"><span>NEUMÁTICOS <b id="mini-tires">100%</b></span><div class="compact-bar"><i id="mini-tires-fill"></i></div></div>
+        <div class="compact-resource mobile-power"><span>POTENCIA <b id="mini-power">0%</b> <small id="mini-power-cap">MÁX 100%</small></span><div class="compact-bar"><i id="mini-power-fill"></i></div></div>
+        <div class="compact-resource mobile-curve"><span>EFECTO <b id="mini-curve">RECTO</b></span><div class="compact-bar bi-bar"><i id="mini-curve-fill"></i></div></div>
+      </div>
+      <div class="mobile-trip" aria-label="Distancia e impulsos del auto">
+        <span>🏁 <b id="mobile-lap-info">VUELTA 1/2</b></span>
+        <span>↗ <b id="mobile-km">0,00 km</b></span>
+        <span>● <b id="mobile-shots">0 impulsos</b></span>
+      </div>
+      <div class="mobile-hint" id="mobile-hint">Tocá el auto amarillo para lanzar · Fondo para mover · Pellizcá para zoom</div>
+      <button id="qualify-trigger" class="qualify-trigger" type="button">🏁 INICIAR QUALIFYING · 3 IMPULSOS</button>
+      <div class="mobile-risk" id="mobile-risk" hidden>RIESGO BAJO</div>
+    </section>
+    <section class="mobile-strip" aria-label="Clasificación resumida">
+      <div class="mobile-strip-head"><span id="race-stage-label">GRILLA · 8 PILOTOS · 2 VUELTAS</span><strong id="mini-status">1.º / 8</strong></div>
+      <div class="mobile-leaders" id="mobile-standings"></div>
+    </section>
+    <div class="foot"><span>FLICK GP · PROTOTIPO JUGABLE V0.7.4</span><span class="kicker" id="status">● Preparando la pista…</span><span>1 JUGADOR + 7 RIVALES IA</span></div>
+    <div id="garage-modal" class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="garage-heading" hidden>
+      <div class="settings-panel garage-panel">
+        <div class="settings-head">
+          <div><small class="panel-eyebrow">FLICK GP · BOXES</small><h2 id="garage-heading">Mi garaje</h2></div>
+          <button class="close-settings" id="close-garage" type="button" aria-label="Cerrar garaje">✕</button>
+        </div>
+        <div class="career-summary">
+          <div><small>CRÉDITOS DISPONIBLES</small><strong id="garage-credits">160</strong></div>
+          <div><small>CARRERAS</small><strong id="garage-races">0</strong></div>
+          <div><small>VICTORIAS</small><strong id="garage-wins">0</strong></div>
+        </div>
+        <p class="career-odometer" id="career-odometer">0,00 km recorridos · 0 impulsos en carreras</p>
+        <p class="career-intro" id="career-intro">Ganás créditos al completar carreras. Comprá mejoras antes del primer impulso para aumentar tus posibilidades.</p>
+        <div class="upgrade-grid" id="upgrade-grid"></div>
+        <div class="garage-footer">
+          <small id="garage-message" role="status">El motor y la suspensión están disponibles desde el comienzo.</small>
+          <button class="btn-main" id="garage-back" type="button">VOLVER A LA PISTA ↗</button>
+        </div>
+      </div>
+    </div>
+    <div id="championship-modal" class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="championship-heading" hidden>
+      <div class="settings-panel championship-panel">
+        <div class="settings-head">
+          <div><small class="panel-eyebrow">FLICK GP · TEMPORADA</small>
+            <h2 id="championship-heading">🏆 MODO CAMPEONATO</h2>
+          </div>
+          <button class="close-settings" id="close-championship" type="button" aria-label="Cerrar campeonato">✕</button>
+        </div>
+        <p id="championship-explainer" class="championship-intro">Elegí una copa de tres Grandes Premios. Cada carrera tiene Qualifying y dos vueltas.</p>
+        <div class="cup-options" id="cup-options">
+          <button class="cup-choice" type="button" data-cup="classic" aria-pressed="true">
+            <strong>🏁 COPA CLÁSICA</strong><small>Valle Verde · Costa Azul · Desierto Rojo</small>
+          </button>
+          <button class="cup-choice" type="button" data-cup="extreme" aria-pressed="false">
+            <strong>⚡ COPA EXTREMA</strong><small>Alpes Nevados · Midnight City · Selva Tropical</small>
+          </button>
+        </div>
+        <div class="champ-schedule" id="championship-schedule"></div>
+        <div class="championship-table-head">
+          <strong>CLASIFICACIÓN GENERAL</strong><small>12 · 10 · 8 · 6 · 4 · 3 · 2 · 1 puntos</small>
+        </div>
+        <div id="championship-table" class="championship-table"></div>
+        <div id="championship-honors" class="championship-honors" hidden></div>
+        <div id="championship-archive" class="championship-archive">0 campeonatos disputados</div>
+        <button id="start-championship" type="button" class="btn-main">🏁 COMENZAR CAMPEONATO</button>
+        <button id="advance-championship" type="button" class="btn-main" hidden>➡ PRÓXIMO GRAN PREMIO</button>
+        <button id="championship-garage" type="button" class="btn-secondary" hidden>🔧 PREPARAR EL AUTO EN EL GARAJE</button>
+        <button id="abandon-championship" type="button" class="btn-secondary champ-abandon" hidden>ABANDONAR CAMPEONATO</button>
+      </div>
+    </div>
+    <div id="rivals-modal" class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="rivals-heading" hidden>
+      <div class="settings-panel rivals-panel">
+        <div class="settings-head">
+          <div><small class="panel-eyebrow">PADDOCK · INTELIGENCIA DE CARRERA</small>
+            <h2 id="rivals-heading">📊 RIVALES Y ESTRATEGIA</h2>
+          </div>
+          <button id="close-rivals" class="close-settings" type="button" aria-label="Cerrar rivales">✕</button>
+        </div>
+        <p id="rival-intro" class="rival-intro">Cada rival tiene una manera propia de atacar las curvas, administrar la energía y elegir su auto.</p>
+        <div id="rival-setup-list" class="rival-setup-list"></div>
+        <div class="rival-stats-heading">RENDIMIENTO DE LA SESIÓN</div>
+        <div class="rival-telemetry-head">
+          <span>PILOTO</span><span>IMP.</span><span>KM</span><span>POT.</span><span>EFECTO</span>
+        </div>
+        <div id="rival-telemetry" class="rival-telemetry"></div>
+        <p class="rivals-note">La potencia media y el efecto se calculan con impulsos realmente ejecutados. Los rivales no reciben energía adicional ni ventajas de física.</p>
+      </div>
+    </div>
+    <div id="grid-modal" class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="grid-heading" hidden>
+      <div class="settings-panel grid-panel">
+        <div class="grid-brow">FLICK GP 0.7.2 · QUALIFYING COMPLETADO</div>
+        <div class="settings-head">
+          <div><h2 id="grid-heading">GRILLA DE LARGADA</h2>
+          <p class="grid-subhead">8 pilotos · 3 impulsos clasificatorios</p></div>
+          <div class="grid-pole-icon" aria-hidden="true">🏁</div>
+        </div>
+        <div id="grid-results" class="grid-results" aria-label="Posiciones de largada"></div>
+        <p class="grid-explainer">Todos los autos comienzan la carrera con neumáticos y reserva al 100%. Se correrán 2 vueltas.</p>
+        <button class="btn-main" id="start-grid-race" type="button">🏎️ INICIAR CARRERA · 2 VUELTAS</button>
+        <button class="btn-secondary" id="grid-skip-quick" type="button">⚡ IR DIRECTO A CARRERA RÁPIDA</button>
+      </div>
+    </div>
+    <div id="setup-modal" class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-heading" hidden>
+      <div class="settings-panel">
+        <div class="settings-head">
+          <div><small class="panel-eyebrow">ANTES DE SALIR A PISTA</small><h2 id="setup-heading">Configurá tu carrera</h2></div>
+          <button class="close-settings" id="close-settings" type="button" aria-label="Cerrar configuración">✕</button>
+        </div>
+        <div class="setting-grid">
+          <label class="setting-block race-mode-setting" for="race-mode-select">
+            <strong>Modalidad de carrera</strong>
+            <span>Qualifying: tres impulsos para conseguir una posición de largada</span>
+            <select id="race-mode-select">
+              <option value="qualifying" selected>🏁 Qualifying + carrera · 2 vueltas</option>
+              <option value="quick">⚡ Carrera rápida · sin clasificación</option>
+            </select>
+          </label>
+          <label class="setting-block track-setting" for="track-select">
+            <strong>Elegí el circuito</strong><span>Cada trazado y superficie cambia la física de los impulsos</span>
+            <select id="track-select">
+              <option value="valley">01 · Valle Verde — asfalto seco</option>
+              <option value="coast">02 · Costa Azul — lluvia variable</option>
+              <option value="desert">03 · Desierto Rojo — tierra y asfalto</option>
+              <option value="alps">04 · Alpes Nevados — hielo y nieve</option>
+              <option value="city">05 · Midnight City — circuito urbano nocturno</option>
+              <option value="jungle">06 · Selva Tropical — humedad y barro</option>
+            </select>
+            <span id="track-description" class="track-description">Asfalto seco · buen agarre en curvas. Los blandos aprovechan las rectas.</span>
+          </label>
+          <section class="circuit-catalog" aria-label="Catálogo de seis pistas">
+            <div class="circuit-catalog-head">
+              <strong>EXPLORÁ LOS 6 CIRCUITOS</strong>
+              <small>Todos desbloqueados durante las pruebas</small>
+            </div>
+            <div class="circuit-cards" id="circuit-cards">
+              <button type="button" class="circuit-card" data-track="valley"><canvas width="140" height="65" aria-hidden="true"></canvas><strong>01 · Valle Verde</strong><small>SECO · 3,20 km</small></button>
+              <button type="button" class="circuit-card" data-track="coast"><canvas width="140" height="65" aria-hidden="true"></canvas><strong>02 · Costa Azul</strong><small>LLUVIA · 3,55 km</small></button>
+              <button type="button" class="circuit-card" data-track="desert"><canvas width="140" height="65" aria-hidden="true"></canvas><strong>03 · Desierto Rojo</strong><small>TIERRA · 3,80 km</small></button>
+              <button type="button" class="circuit-card" data-track="alps"><canvas width="140" height="65" aria-hidden="true"></canvas><strong>04 · Alpes Nevados</strong><small>HIELO · 4,15 km</small></button>
+              <button type="button" class="circuit-card" data-track="city"><canvas width="140" height="65" aria-hidden="true"></canvas><strong>05 · Midnight City</strong><small>URBANO · 3,05 km</small></button>
+              <button type="button" class="circuit-card" data-track="jungle"><canvas width="140" height="65" aria-hidden="true"></canvas><strong>06 · Selva Tropical</strong><small>BARRO · 3,90 km</small></button>
+            </div>
+          </section>
+          <label class="setting-block" for="difficulty-select"><strong>Rivales IA · Nuevos perfiles 0.7.4</strong>
+            <span>Profesional y Experto analizan ángulos, potencia, efecto y desgaste antes de cada impulso</span>
+            <select id="difficulty-select"><option value="beginner">Principiante · accesible</option><option value="pro" selected>Profesional · competitivo</option><option value="expert">Experto · máxima precisión</option></select>
+          </label>
+          <button id="rival-scout-button" class="btn-secondary rival-scout-button" type="button">
+            📊 CONOCER A LOS 7 RIVALES Y SUS NEUMÁTICOS
+          </button>
+          <label class="setting-block" for="tire-select"><strong>Neumáticos</strong><span>Equilibrio entre asfalto y escapatorias</span>
+            <select id="tire-select"><option value="soft">Blandos · rápidos en asfalto</option><option value="medium" selected>Medios · equilibrados</option><option value="hard">Duros · resistentes fuera de pista</option></select>
+          </label>
+          <label class="setting-block" for="wing-select"><strong>Alerón</strong><span>Distancia del impulso frente a estabilidad</span>
+            <select id="wing-select"><option value="low">Baja carga · mayor alcance</option><option value="medium" selected>Media carga · equilibrado</option><option value="high">Alta carga · menor rebote</option></select>
+          </label>
+        </div>
+        <p class="settings-note">Los rivales comparten las mismas reglas de potencia, neumáticos y energía que tu auto. En Qualifying, cada uno de los ocho pilotos tiene tres impulsos individuales sin tráfico. Los resultados definen la grilla; al largar, energía y neumáticos se recuperan al 100%. Carrera rápida omite la clasificación. Valle Verde prioriza el asfalto, Costa Azul exige controlar el agarre bajo lluvia y Desierto Rojo combina asfalto y tramos de tierra. Las barras de reserva y neumáticos se conservan: lanzar al máximo tiene un costo. Al aplicar, comienza una nueva carrera.</p>
+        <button id="apply-settings" class="btn-main" type="button">GUARDAR Y COMENZAR CARRERA ↗</button>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="./local.js"></script>
+</body>
+</html>
