@@ -9,13 +9,17 @@ export const TRACK_IDS=["valley","coast","desert","alps","city","jungle"];
 export const DIFFICULTIES=["beginner","pro","expert"];
 const {cpuShot,TRACKS}=__test;
 
+// Purely visual fields (names, paint) never feed the physics: they are left out of the
+// hash so a cosmetic change can be proven result-neutral with npm run golden.
+const COSMETIC=new Set(["name","color","carColor","title"]);
+const physical=(key,value)=>COSMETIC.has(key)?undefined:value;
 function act(run,state,action){
   const verdict=validateAction(state,PLAYER,action);
   if(!verdict.ok)throw new Error("Acción rechazada ("+action.type+"): "+verdict.error);
   const t0=performance.now();
   const next=applyAction(state,PLAYER,action);
   const ms=performance.now()-t0;
-  run.hash.update(JSON.stringify(next));
+  run.hash.update(JSON.stringify(next,physical));
   run.actions++;
   if(action.type==="flick"&&state.phase==="racing")run.raceRoundMs.push(ms);
   return next;

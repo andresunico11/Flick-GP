@@ -127,7 +127,7 @@
     }
    ],
    "actions": 24,
-   "stateHash": "20f3379dd9f89dde868b97d17462f676274772a57deefe75835c540a085d87c9"
+   "stateHash": "37e2085a203a2ad1f4460f7df3b640fe45657664bfbe2cedc4a0becb1c5ede0a"
   },
   "race:valley:pro": {
    "winner": "cpu1",
@@ -255,7 +255,7 @@
     }
    ],
    "actions": 20,
-   "stateHash": "a6e4de5ec328ad5212ba1a3b157e66d7d25a26aab9c3f3c824f8e67feec2e856"
+   "stateHash": "68a7b2b2f1cef9378373e5263bcfa3fbac877dafc53963bc67e358fafeede18f"
   },
   "race:valley:expert": {
    "winner": "cpu1",
@@ -383,7 +383,7 @@
     }
    ],
    "actions": 19,
-   "stateHash": "85af7887d52cd09ebda32e180f7efd3a0ae4d59bb748a19a255a9999d5d13518"
+   "stateHash": "da586fcec8f40160d85dbd47842c5cbf0204d437daedbbb8d32cf78da0cdd8c7"
   },
   "race:coast:beginner": {
    "winner": "human",
@@ -511,7 +511,7 @@
     }
    ],
    "actions": 36,
-   "stateHash": "df329f56933cf9953fb123015dbefc21b6185865d655623bd6a8259176f18d45"
+   "stateHash": "8d2b3611b5d4353b491cda7f94a05e8aa20e8f1a1d88c82b3b1c3987e951f200"
   },
   "race:coast:pro": {
    "winner": "human",
@@ -639,7 +639,7 @@
     }
    ],
    "actions": 32,
-   "stateHash": "6536637e9172967a8e02416c1f25bdd370c65e17ab8e973e3ead30f0d7c399ca"
+   "stateHash": "9b1acde1a03a2e6723bc04e2ec30d03cdc71a1383619a4fe3513e54100097d49"
   },
   "race:coast:expert": {
    "winner": "human",
@@ -767,7 +767,7 @@
     }
    ],
    "actions": 32,
-   "stateHash": "13dca163be002db369c0e31ca464f97c26413d5b203d04009ad9236c331ec5e8"
+   "stateHash": "2d2c730170f619db0b89648aaa6051d0a0c80925edc057851ffe5f1567607883"
   },
   "race:desert:beginner": {
    "winner": "cpu1",
@@ -895,7 +895,7 @@
     }
    ],
    "actions": 36,
-   "stateHash": "0892c996672c91d694b3c0a37fe5d12197366307ba1b329e5aa2fef3050ed65b"
+   "stateHash": "ac625b3baa5c3566dc949466cd9783cd925ab9dd5ecdd6b4018932ea9a42a295"
   },
   "race:desert:pro": {
    "winner": "cpu1",
@@ -1023,7 +1023,7 @@
     }
    ],
    "actions": 32,
-   "stateHash": "d2228ee5d37f51f34d1b8cef88329266782dc75e1115746ec2d2e7a0bda41234"
+   "stateHash": "f3c8541a56e41f47cbc01a625cf42cd2a5c45ce2c594e1d100c511a7c6d0f8f4"
   },
   "race:desert:expert": {
    "winner": "cpu1",
@@ -1151,7 +1151,7 @@
     }
    ],
    "actions": 31,
-   "stateHash": "b22874d21bd842aa3d64992e55057bfb8e50ed28c461c7ed2b8505a18549f9fb"
+   "stateHash": "ca1ec1e1b7a8958cb9466df631656be069d7ca77cdea01a3270ff4b71e9091f7"
   },
   "race:alps:beginner": {
    "winner": "cpu3",
@@ -1279,7 +1279,7 @@
     }
    ],
    "actions": 29,
-   "stateHash": "3d5bc0e3b023a1ee8414a42169c922cb2d2462c091e25d0c76199f79ae27ab21"
+   "stateHash": "83f087b1f4d2e57e573e3dd70e0b071a3e8faf2dba0241545342986a26619dfa"
   },
   "race:alps:pro": {
    "winner": "cpu2",
@@ -1407,7 +1407,7 @@
     }
    ],
    "actions": 24,
-   "stateHash": "be55023298eb9a556cdfed5e2eeb9383ae38582efd358e11143b52b2df23354c"
+   "stateHash": "c7b8cdb7892ca3f934fd42d3cec91accea8b1e115b5dc152d315b068006c7389"
   },
   "race:alps:expert": {
    "winner": "human",
@@ -1535,7 +1535,7 @@
     }
    ],
    "actions": 22,
-   "stateHash": "c7eb178bdb2c90656ce8e6849271678c8337585f5ff71e65bf12c00441d819a2"
+   "stateHash": "77df5fa8015d4c838f1d6160079946f933305704b6f12625c2722c8fffff8142"
   },
   "race:city:beginner": {
    "winner": "human",
@@ -1663,7 +1663,7 @@
     }
    ],
    "actions": 32,
-   "stateHash": "18e5a2ee49b51c34104bf3fdca973793d8facedbb360107218139307f4af805a"
+   "stateHash": "9a46a887e5d502137b90079e2d7442d314d22cac5e4b851ded3d504c54f4b23d"
   },
   "race:city:pro": {
    "winner": "human",
@@ -1791,7 +1791,7 @@
     }
    ],
    "actions": 27,
-   "stateHash": "8203f59bc60363667c6a5241a55e9c3997303c20e9a9daa2a3210bd43b205df5"
+   "stateHash": "5f162c4b3fd49bbe5634487811301567cdcd55cc7cbcb783939ce345973b797e"
   },
   "race:city:expert": {
    "winner": "human",
@@ -1919,7 +1919,7 @@
     }
    ],
    "actions": 27,
-   "stateHash": "a0ef68ee8d31ec4c1c2b655b03c78130b96f0895b301cdefe9b278f85210ea71"
+   "stateHash": "99508335613ae27dd3d8c6069fec646486a096881bc7b49fa877773bd4d5201b"
   },
   "race:jungle:beginner": {
    "winner": "human",
@@ -2047,7 +2047,7 @@
     }
    ],
    "actions": 37,
-   "stateHash": "6eb48f5e21b79b39af54df382cc2517ec13b1c961771cca6cd4bda9d07cb847c"
+   "stateHash": "a9da08ddafbce4439fe13e07bfe9acab2e2d4c62040da9d5ed01f2923ea6b373"
   },
   "race:jungle:pro": {
    "winner": "human",
@@ -2175,7 +2175,7 @@
     }
    ],
    "actions": 34,
-   "stateHash": "c94424cd94cd56586b07034d5f52bade1029f737f4e92a5945c3a8dbf69d7801"
+   "stateHash": "8c8314981f231c9bc27c5fd5d138c9521d4f8df2332af4669664ef04d0081759"
   },
   "race:jungle:expert": {
    "winner": "human",
@@ -2303,7 +2303,7 @@
     }
    ],
    "actions": 34,
-   "stateHash": "7d9e1f0529caa737a1dfb24ab34ae5ff6e6873bc27bbc916a8fa34e42f68cec5"
+   "stateHash": "1a250cc5e66fbb69461e9c802a154c87d5f949c6b0fc9843c6ec2981128f3b8e"
   },
   "race:desert:pro:upgraded": {
    "winner": "human",
@@ -2431,7 +2431,7 @@
     }
    ],
    "actions": 32,
-   "stateHash": "bef1481e49cbc62c2fdf716dfdc8b2a9c29e0d00183d16c082acca8addc3e940"
+   "stateHash": "f1352807658bdca792e9c1275bf3d98ffc5f28945f79fb7446b971184b919073"
   },
   "race:jungle:pro:upgraded": {
    "winner": "human",
@@ -2559,7 +2559,7 @@
     }
    ],
    "actions": 28,
-   "stateHash": "7a478dc79648e49e083a0022d2d11e2f20d325b022f8797b1035d743d76468b6"
+   "stateHash": "8699fa05d2c9ff33ddbf91d4df7f4c812a212649782cf78837531bfdf525fbca"
   },
   "championship:classic:pro": {
    "gps": [
@@ -2966,7 +2966,7 @@
     "bonus": 80
    },
    "actions": 84,
-   "stateHash": "aaa1ed1bf294e0b419c11752aad7561be4c2a9efdc26d8409d55eae6825b67af"
+   "stateHash": "85e156de4a667bfaeef25c16ef81e2e62e8f2c44e4d2742929e5258f2b3f762d"
   },
   "championship:extreme:pro": {
    "gps": [
@@ -3373,7 +3373,7 @@
     "bonus": 300
    },
    "actions": 85,
-   "stateHash": "b39c0cee148dff630cba2e702125df52185b566b28ae18a32421892708c73c25"
+   "stateHash": "79c8eb80496e84002e0f97c189ecd2d52c7bb8429565c0a13bf16a90cad56dcc"
   }
  }
 }
